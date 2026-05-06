@@ -1,0 +1,277 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles - Dark theme */
+body {
+  background-color: #0f0f1a;
+  color: #e0e0e0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 110%; /* 10% larger base font */
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3a5c;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4A90A2;
+}
+
+/* Calendar overrides - Dark mode */
+.rbc-calendar {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 8px;
+  color: #e0e0e0;
+  border: 1px solid #2a2a4a;
+}
+
+.rbc-toolbar {
+  margin-bottom: 12px !important;
+}
+
+.rbc-toolbar-label {
+  color: #e0e0e0 !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+}
+
+.rbc-toolbar button {
+  color: #4A90A2 !important;
+  border-color: #2a3a5c !important;
+  border-radius: 8px !important;
+  font-size: 0.95rem !important;
+  padding: 8px 18px !important;
+  transition: all 0.2s;
+  background: #1a1a2e !important;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #2a2a4a !important;
+  border-color: #4A90A2 !important;
+  color: #6ab0c2 !important;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #4A90A2 !important;
+  color: white !important;
+  border-color: #4A90A2 !important;
+}
+
+.rbc-today {
+  background-color: rgba(74, 144, 162, 0.1) !important;
+}
+
+.rbc-off-range-bg {
+  background-color: #12121e !important;
+}
+
+.rbc-header {
+  padding: 10px !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+  color: #4A90A2 !important;
+  border-bottom: 1px solid #2a2a4a !important;
+}
+
+.rbc-header + .rbc-header {
+  border-left: 1px solid #2a2a4a !important;
+}
+
+.rbc-event {
+  border-radius: 8px !important;
+  padding: 4px 8px !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  border: none !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+}
+
+.rbc-event-content {
+  font-size: 0.9rem !important;
+}
+
+.rbc-date-cell {
+  font-size: 0.95rem !important;
+  padding: 6px !important;
+  color: #a0a0b8 !important;
+}
+
+.rbc-date-cell.rbc-now {
+  font-weight: 700 !important;
+  color: #4A90A2 !important;
+}
+
+.rbc-show-more {
+  color: #4A90A2 !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+.rbc-month-row {
+  min-height: 90px !important;
+  border-top: 1px solid #2a2a4a !important;
+}
+
+.rbc-timeslot-group {
+  min-height: 45px !important;
+  border-bottom: 1px solid #2a2a4a !important;
+}
+
+.rbc-time-content {
+  border-top: 1px solid #2a2a4a !important;
+}
+
+.rbc-time-header {
+  border-bottom: 1px solid #2a2a4a !important;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid #1e1e36 !important;
+}
+
+.rbc-time-content > * + * > * {
+  border-left: 1px solid #2a2a4a !important;
+}
+
+.rbc-label {
+  color: #808098 !important;
+  font-size: 0.85rem !important;
+}
+
+.rbc-time-view {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  border: 1px solid #2a2a4a !important;
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid #2a2a4a !important;
+}
+
+.rbc-month-view {
+  border: 1px solid #2a2a4a !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+/* Sidebar transitions */
+.sidebar-enter {
+  transform: translateX(-100%);
+}
+.sidebar-enter-active {
+  transform: translateX(0);
+  transition: transform 300ms ease-in-out;
+}
+.sidebar-exit {
+  transform: translateX(0);
+}
+.sidebar-exit-active {
+  transform: translateX(-100%);
+  transition: transform 300ms ease-in-out;
+}
+
+/* Print styles for calendar export */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Message bubble max-width - large for better readability */
+.message-bubble {
+  max-width: 95%;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+@media (min-width: 640px) {
+  .message-bubble {
+    max-width: 90%;
+  }
+}
+
+@media (min-width: 768px) {
+  .message-bubble {
+    max-width: 85%;
+  }
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.2s ease-in-out;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+}
+
+/* Activity type badges */
+.activity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Animated pulse for loading */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Input and form elements dark mode */
+input, textarea, select {
+  background-color: #1a1a2e;
+  border-color: #2a2a4a;
+  color: #e0e0e0;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #4A90A2;
+  outline: none;
+}
+
+/* Table styles for dark mode */
+table {
+  color: #e0e0e0;
+}
+
+th {
+  color: #a0a0b8;
+  border-bottom-color: #2a2a4a;
+}
+
+td {
+  border-bottom-color: #1e1e36;
+}

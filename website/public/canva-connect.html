@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Compass to Canva</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f0f1a; color: #e0e0e0; font-family: system-ui; display: flex; justify-content: center; padding: 60px 20px; }
+  .card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 48px; max-width: 560px; text-align: center; }
+  h1 { color: #4A90A2; margin-bottom: 8px; font-size: 24px; }
+  p { color: #a0a0b8; margin-bottom: 24px; line-height: 1.6; font-size: 15px; }
+  .btn { display: inline-block; background: #4A90A2; color: white; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-size: 18px; font-weight: 600; cursor: pointer; border: none; }
+  .btn:hover { background: #3a7a8a; }
+  .success { color: #4CAF50; margin-top: 16px; padding: 12px; background: #1a3a1a; border-radius: 8px; }
+  .error { color: #E3000B; margin-top: 16px; padding: 12px; background: #3a1a1a; border-radius: 8px; }
+  .note { margin-top: 24px; padding: 12px; background: #2a2a4a; border-radius: 8px; font-size: 13px; color: #808098; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔗 Connect Compass to Canva</h1>
+  <p id="status">Loading authorization link...</p>
+  <a class="btn" id="auth-button" href="#" target="_blank">🔐 Authorize with Canva</a>
+  <div class="note"><strong>Important:</strong> Canva auth codes expire in 2 minutes. Click the button and approve quickly!</div>
+  <div id="result"></div>
+</div>
+
+<script>
+// Fetch the auth URL from the server — server generates + stores the PKCE verifier
+fetch('http://127.0.0.1:3001/api/canva/auth-url')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('auth-button').href = data.url;
+    document.getElementById('status').textContent = '✅ Ready! Click below to authorize with Canva.';
+  })
+  .catch(() => {
+    document.getElementById('status').textContent = '❌ Could not reach API server on port 3001. Make sure it\'s running.';
+    document.getElementById('auth-button').style.display = 'none';
+  });
+</script>
+</body>
+</html>

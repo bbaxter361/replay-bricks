@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Compass to Canva</title>
+<style>
+  body {
+    background: #0f0f1a;
+    color: #e0e0e0;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+  }
+  .card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 16px;
+    padding: 48px;
+    max-width: 500px;
+    text-align: center;
+  }
+  h1 { color: #4A90A2; margin-bottom: 8px; }
+  p { color: #a0a0b8; margin-bottom: 32px; line-height: 1.6; }
+  .btn {
+    display: inline-block;
+    background: #4A90A2;
+    color: white;
+    padding: 16px 32px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-size: 18px;
+    font-weight: 600;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+  }
+  .btn:hover { background: #3a7a8a; }
+  .steps { text-align: left; margin: 24px 0; color: #808098; font-size: 14px; }
+  .steps li { margin: 8px 0; }
+  .error { color: #E3000B; margin-top: 16px; font-size: 14px; }
+  .note { margin-top: 24px; padding: 12px; background: #2a2a4a; border-radius: 8px; font-size: 13px; color: #808098; }
+  code { color: #FFD700; background: #0f0f1a; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔗 Connect Compass to Canva</h1>
+  <p>Click below to authorize Compass to fill your Canva calendar templates.</p>
+
+  <ol class="steps">
+    <li>Click the button below — it opens Canva</li>
+    <li>Log in to Canva if needed</li>
+    <li>Click <strong>Allow</strong> to authorize</li>
+    <li>You'll come back here with a "Connected!" message</li>
+  </ol>
+
+  <a class="btn" id="canva-link" href="#">Connect to Canva</a>
+
+  <div class="note">
+    Make sure <code>http://127.0.0.1:3001/api/canva/callback</code> is added as
+    a redirect URI in your Canva Developer Portal under <strong>Your Integrations → Authentication</strong>.
+  </div>
+
+  <div class="error" id="error-msg" style="display:none"></div>
+</div>
+
+<script>
+// Get the auth URL from the server
+fetch('/api/canva/auth-url')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('canva-link').href = data.url;
+  })
+  .catch(err => {
+    document.getElementById('error-msg').style.display = 'block';
+    document.getElementById('error-msg').textContent = 'Could not reach the Compass server. Make sure it is running on port 3001.';
+  });
+</script>
+</body>
+</html>

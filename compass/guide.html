@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🧭 Compass — Quick-Start Guide</title>
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --card: #1a1a2e;
+      --card-hover: #212140;
+      --border: #2a2a4a;
+      --text: #e0e0e0;
+      --muted: #8b8ba8;
+      --violet: #a78bfa;
+      --violet-light: #c4b5fd;
+      --amber: #fbbf24;
+      --teal: #2dd4bf;
+      --rose: #f472b6;
+      --sage: #86efac;
+      --blue: #93c5fd;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+      padding: 48px 24px 40px;
+      background: linear-gradient(135deg, #1a1a3e 0%, #1e1b4b 50%, #1a1a2e 100%);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 50%, rgba(167,139,250,0.08) 0%, transparent 50%),
+                  radial-gradient(circle at 70% 50%, rgba(147,197,253,0.06) 0%, transparent 50%);
+    }
+    header h1 {
+      font-size: 2.6rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--violet-light), var(--violet));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    header .subtitle {
+      font-size: 1.1rem;
+      color: var(--muted);
+      position: relative;
+    }
+    header .subtitle strong { color: var(--violet-light); }
+
+    /* Section cards */
+    section {
+      margin-bottom: 36px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      transition: border-color 0.2s;
+    }
+    section:hover { border-color: #3a3a6a; }
+
+    section h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--violet-light);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section h2 .emoji { font-size: 1.6rem; }
+    section .desc {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+    }
+
+    /* Feature grids */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: background 0.2s;
+    }
+    .card:hover { background: var(--card-hover); }
+    .card h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .card h3 .icon { margin-right: 6px; }
+    .card p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+    /* Steps */
+    .steps { list-style: none; padding: 0; }
+    .steps li {
+      padding: 10px 0 10px 34px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      position: relative;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .steps li:last-child { border-bottom: none; }
+    .steps li::before {
+      content: attr(data-n);
+      position: absolute;
+      left: 0; top: 10px;
+      width: 22px; height: 22px;
+      background: rgba(167,139,250,0.15);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      color: var(--violet-light);
+    }
+
+    /* Tips box */
+    .tip {
+      background: rgba(167,139,250,0.08);
+      border-left: 3px solid var(--violet);
+      border-radius: 0 10px 10px 0;
+      padding: 14px 18px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+    .tip strong { color: var(--violet-light); }
+
+    /* Command block */
+    code, pre {
+      background: rgba(0,0,0,0.4);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+    }
+    code {
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--teal);
+    }
+    pre {
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 12px 0;
+      border: 1px solid var(--border);
+      color: var(--teal);
+    }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 12px 0; }
+    th { text-align: left; padding: 10px 14px; color: var(--violet-light); border-bottom: 2px solid var(--border); font-weight: 600; }
+    td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--text); }
+    td code { background: rgba(167,139,250,0.1); color: var(--violet-light); }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 32px 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    footer strong { color: var(--violet-light); }
+
+    /* Print */
+    @media print {
+      body { background: white; color: #1a1a2e; }
+      section { border-color: #ddd; background: #fafafa; }
+      pre, code { background: #eee; color: #333; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- HEADER -->
+<!-- ============================================================ -->
+<header>
+  <h1>🧭 Compass</h1>
+  <p class="subtitle">Quick-Start Guide for <strong>Amanda</strong> — Resident Activities Director</p>
+</header>
+
+<!-- ============================================================ -->
+<!-- WHAT IS COMPASS -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">✨</span> What Is Compass?</h2>
+  <p class="desc">Compass is your all-in-one activities dashboard. It helps you manage the <strong>Assisted Living</strong> and <strong>Memory Care</strong> calendars, track resident contacts, ask your AI assistant <strong>Spring</strong> for activity ideas, log the books you're reading, and export your calendar to PDF, CSV, or Canva.</p>
+
+  <table>
+    <thead>
+      <tr><th>Page</th><th>What It Does</th><th>Icon</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Dashboard</strong></td><td>Today's activities, upcoming week, quick search, recent chats</td><td>📊</td></tr>
+      <tr><td><strong>Calendar</strong></td><td>Full calendar with Assisted Living / Memory Care filters, export to PDF, CSV, iCal, and Canva</td><td>📅</td></tr>
+      <tr><td><strong>Contacts</strong></td><td>Resident, family, doctor, and staff contacts with tags and search</td><td>👥</td></tr>
+      <tr><td><strong>Books</strong></td><td>Your reading list with weekly/monthly/yearly page-count stats</td><td>📚</td></tr>
+      <tr><td><strong>AI Chat (Spring)</strong></td><td>Talk to Spring — your AI activities expert. She can add events and books for you.</td><td>🤖</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- CALENDAR -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">📅</span> Calendar</h2>
+  <p class="desc">Plan activities for Memory Care, Assisted Living, or both. Switch between month, week, and day views.</p>
+
+  <ul class="steps">
+    <li data-n="1"><strong>View by wing</strong> — Use the filter dropdown to show "Both Calendars", "Assisted Living", or "Memory Care".</li>
+    <li data-n="2"><strong>Add an event</strong> — Click <code>+ Add Event</code>, fill in the title, date/time, activity type, wing, and residents.</li>
+    <li data-n="3"><strong>Activity types</strong> — Music 🎵, Art 🎨, Exercise 🏋️, Games 🎮, Outings 🌳, Therapy 💆, or Custom ✨. Each has its own color.</li>
+    <li data-n="4"><strong>Click an event</strong> — See full details, add or remove residents, change the time or wing.</li>
+    <li data-n="5"><strong>Export</strong> — Hover "Export" to download as <strong>PDF</strong>, <strong>CSV</strong>, <strong>iCal</strong>, or push events to <strong>Canva</strong> ✨ for a beautiful print calendar.</li>
+  </ul>
+
+  <div class="tip">
+    <strong>💡 Tip:</strong> When viewing "Both Calendars", events are color-coded by wing — <span style="color:#93c5fd">blue for Assisted Living</span>, <span style="color:#c4b5fd">violet for Memory Care</span>. When filtered to one wing, you'll see activity-type colors instead.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- CONTACTS -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">👥</span> Contacts</h2>
+  <p class="desc">Keep track of residents, family members, doctors, and staff — all searchable with tags and notes.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="icon">🔍</span> Search & Filter</h3>
+      <p>Search by name, tag, phone number, or notes. Filter the list by relationship type: Resident, Family, Doctor, or Staff.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">🏷️</span> Tags</h3>
+      <p>Add descriptive tags like <code>music-lover</code>, <code>morning-person</code>, <code>needs-quiet</code> to quickly group residents by preference.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">📝</span> Notes</h3>
+      <p>Record each resident's preferences, triggers, and activity history so you always know what works best for them.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- AI CHAT — SPRING -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">🤖</span> AI Chat — Spring</h2>
+  <p class="desc"><strong>Spring</strong> is your AI-powered activities planning assistant. She's an expert in memory care, Montessori methods, exercise programs, art projects, and more. She can schedule events and add books directly from your conversation.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="icon">💬</span> Ask Anything</h3>
+      <p>Try: <em>"What's a good 30-minute music activity for 6 memory care residents with late-stage Alzheimer's?"</em></p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">📅</span> Create Events</h3>
+      <p>Say: <em>"Schedule chair yoga for assisted living tomorrow at 10am with Mildred and George."</em> Spring adds it to the calendar.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">🖼️</span> Share Images</h3>
+      <p>Upload a photo of your supply closet or art materials — Spring can suggest activities based on what you have.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">📚</span> Add Books</h3>
+      <p>Tell her: <em>"Spring, add 'Dune' by Frank Herbert, 412 pages."</em> It shows up on your Books page.</p>
+    </div>
+  </div>
+
+  <ul class="steps" style="margin-top:20px">
+    <li data-n="1">Click <strong>AI Chat</strong> in the sidebar.</li>
+    <li data-n="2">Type your message or pick a suggested prompt.</li>
+    <li data-n="3">Spring replies with detailed, practical activity suggestions.</li>
+    <li data-n="4">If you asked for an event or book, Spring adds it automatically and confirms.</li>
+  </ul>
+
+  <div class="tip">
+    <strong>⚠️ Server Required:</strong> The chat feature needs the Compass API server running:<br>
+    <pre>cd compass && node server.js</pre>
+    The server runs on port <code>3001</code> and connects to DeepSeek AI.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- BOOKS -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">📚</span> Books — Your Reading Tracker</h2>
+  <p class="desc">Track every book you finish. See your total pages read this week, this month, and this year at a glance.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="icon">➕</span> Add Manually</h3>
+      <p>Click <strong>"Add New Book"</strong> on the Books page, enter the title, author, and page count.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">🤖</span> Add via Spring</h3>
+      <p>In the AI Chat, just tell Spring to add a book and she'll handle it.</p>
+    </div>
+    <div class="card">
+      <h3><span class="icon">📊</span> Stats Dashboard</h3>
+      <p>Four stat cards show: <strong>This Week</strong>, <strong>This Month</strong>, <strong>This Year</strong> pages, and <strong>Total Books</strong> finished.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- GAMES & ACTIVITIES -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">🎮</span> Games & Activities</h2>
+  <p class="desc">Games are scheduled on the Calendar just like any other activity. Use the <strong>Games</strong> activity type to plan bingo, card games, trivia, board games, puzzles, and more.</p>
+
+  <h3 style="margin-top:16px; color:var(--text)">Activity Types You Can Schedule</h3>
+  <table>
+    <thead>
+      <tr><th>Type</th><th>Icon</th><th>Examples</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Music</strong></td><td>🎵</td><td>Sing-alongs, music therapy, instrument exploration, personalized playlists</td></tr>
+      <tr><td><strong>Art</strong></td><td>🎨</td><td>Watercolor, collage, crafts, seasonal decoration making</td></tr>
+      <tr><td><strong>Exercise</strong></td><td>🏋️</td><td>Chair yoga, seated tai chi, gentle stretching, walking club</td></tr>
+      <tr><td><strong>Games</strong></td><td>🎮</td><td>Bingo, card games, trivia, word games, board games, puzzles</td></tr>
+      <tr><td><strong>Outings</strong></td><td>🌳</td><td>Garden walks, bird watching, raised-bed gardening, courtyard socials</td></tr>
+      <tr><td><strong>Therapy</strong></td><td>💆</td><td>Aromatherapy, sensory stimulation, reminiscence sessions, validation therapy</td></tr>
+      <tr><td><strong>Custom</strong></td><td>✨</td><td>Any activity that doesn't fit the other categories</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <strong>💡 Spring knows games!</strong> Ask her: <em>"Spring, what games work well for 4 assisted living residents who love competition?"</em> or <em>"Plan a trivia afternoon for memory care."</em>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- QUICK REFERENCE -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">⚡</span> Quick Reference — Common Tasks</h2>
+
+  <table>
+    <thead><tr><th>I want to…</th><th>How to do it</th></tr></thead>
+    <tbody>
+      <tr><td>Schedule an activity</td><td>Calendar → <code>+ Add Event</code>, or ask Spring in chat</td></tr>
+      <tr><td>See today's schedule</td><td>Open the <strong>Dashboard</strong> — it's the home page</td></tr>
+      <tr><td>Filter by Memory Care only</td><td>Calendar → wing filter dropdown → "Memory Care"</td></tr>
+      <tr><td>Print this month's calendar</td><td>Calendar → Export → Export as PDF</td></tr>
+      <tr><td>Send calendar to Canva</td><td>Calendar → Export → Export to Canva ✨</td></tr>
+      <tr><td>Find a resident quickly</td><td>Dashboard → Quick Search (type name or tag)</td></tr>
+      <tr><td>Add a resident contact</td><td>Contacts → <code>+ Add Contact</code></td></tr>
+      <tr><td>Ask Spring for activity ideas</td><td>AI Chat → type your question</td></tr>
+      <tr><td>Add a book to my list</td><td>Books → Add New Book, or tell Spring</td></tr>
+      <tr><td>Clear all data</td><td>Dashboard → scroll to bottom → Reset Data (confirms first)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- RUNNING THE APP -->
+<!-- ============================================================ -->
+<section>
+  <h2><span class="emoji">🚀</span> Running the App</h2>
+  <pre>cd compass
+npm install
+npm run dev        # Starts the web app on http://localhost:5174
+node server.js     # (separate terminal) Starts the AI chat API server</pre>
+  <p style="color:var(--muted); font-size:0.9rem">All your data lives in your browser — nothing is sent anywhere except your chat messages to DeepSeek via the local API server.</p>
+</section>
+
+<footer>
+  <p>Made with ❤️ for <strong>Amanda</strong> — Compass v1.0</p>
+</footer>
+
+</div>
+</body>
+</html>
