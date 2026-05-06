@@ -1,0 +1,16 @@
+# Main Replay Bricks website
+[build]
+  base = "website"
+  publish = "dist"
+  command = "npm run build"
+
+[build.processing]
+  skip_processing = false
+
+[build.processing.html]
+  pretty_urls = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
