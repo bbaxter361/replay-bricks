@@ -1,0 +1,15 @@
+app = "compass-api"
+primary_region = "iad"
+
+[build]
+  builder = "heroku/buildpacks:20"
+  
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[env]
+  PORT = "3001"
