@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a"/>
+      <stop offset="50%" style="stop-color:#1a0a0a"/>
+      <stop offset="100%" style="stop-color:#0d0d1a"/>
+    </linearGradient>
+    <linearGradient id="brickGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3000B"/>
+      <stop offset="100%" style="stop-color:#b80009"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="100%" style="stop-color:#ff8c00"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  <!-- Grid pattern -->
+  <g opacity="0.03">
+    <line x1="0" y1="0" x2="1200" y2="630" stroke="white" stroke-width="1"/>
+    <line x1="400" y1="0" x2="1200" y2="420" stroke="white" stroke-width="1"/>
+    <line x1="800" y1="0" x2="1200" y2="210" stroke="white" stroke-width="1"/>
+    <line x1="0" y1="210" x2="1200" y2="630" stroke="white" stroke-width="1"/>
+    <line x1="0" y1="420" x2="400" y2="630" stroke="white" stroke-width="1"/>
+  </g>
+  <!-- LEGO Brick decoration -->
+  <rect x="100" y="80" width="120" height="85" rx="6" fill="url(#brickGrad)" opacity="0.15"/>
+  <rect x="100" y="80" width="120" height="22" rx="4" fill="#b80009" opacity="0.15"/>
+  <rect x="980" y="80" width="120" height="85" rx="6" fill="url(#brickGrad)" opacity="0.15"/>
+  <rect x="980" y="80" width="120" height="22" rx="4" fill="#b80009" opacity="0.15"/>
+  <!-- Main LEGO brick icon -->
+  <rect x="525" y="100" width="150" height="110" rx="8" fill="url(#brickGrad)" filter="url(#glow)"/>
+  <rect x="525" y="100" width="150" height="30" rx="4" fill="#b80009"/>
+  <circle cx="565" cy="115" r="8" fill="#FFD700"/>
+  <circle cx="635" cy="115" r="8" fill="#FFD700"/>
+  <circle cx="565" cy="170" r="6" fill="#FFD700" opacity="0.4"/>
+  <circle cx="635" cy="170" r="6" fill="#FFD700" opacity="0.4"/>
+  <!-- Title -->
+  <text x="600" y="275" font-family="'Arial Black', Impact, sans-serif" font-size="72" fill="white" text-anchor="middle" font-weight="900" letter-spacing="2">
+    REPLAY<tspan fill="#E3000B">.</tspan>BRICKS
+  </text>
+  <!-- Tagline -->
+  <text x="600" y="330" font-family="Arial, sans-serif" font-size="22" fill="#999" text-anchor="middle" font-weight="400" letter-spacing="3">
+    PREMIUM LEGO SETS &amp; PARTS SINCE 1999
+  </text>
+  <!-- Divider -->
+  <rect x="400" y="360" width="400" height="3" rx="1.5" fill="url(#brickGrad)"/>
+  <!-- Features -->
+  <g transform="translate(0, 395)">
+    <circle cx="350" cy="12" r="4" fill="#FFD700"/>
+    <text x="365" y="17" font-family="Arial, sans-serif" font-size="16" fill="#aaa">Trusted Seller</text>
+    <circle cx="550" cy="12" r="4" fill="#FFD700"/>
+    <text x="565" y="17" font-family="Arial, sans-serif" font-size="16" fill="#aaa">120K+ Pieces</text>
+    <circle cx="760" cy="12" r="4" fill="#FFD700"/>
+    <text x="775" y="17" font-family="Arial, sans-serif" font-size="16" fill="#aaa">Free Shipping USA</text>
+  </g>
+  <!-- Bottom branding -->
+  <text x="600" y="580" font-family="Arial, sans-serif" font-size="13" fill="#555" text-anchor="middle">
+    store.bricklink.com/replay1138  ·  replaybricks.brickowl.com
+  </text>
+</svg>

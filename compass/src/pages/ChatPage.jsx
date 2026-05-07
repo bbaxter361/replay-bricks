@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API } from '../api';
+import { API, API_BASE } from '../api';
 
 // Color lookup for event types
 const typeColors = {
@@ -47,6 +47,9 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreviewName, setFilePreviewName] = useState(null);
+  const [fileUploading, setFileUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -61,32 +64,44 @@ export default function ChatPage() {
     inputRef.current?.focus();
   }, []);
 
-  // Handle image selection
-  const handleImageSelect = (e) => {
+  // Handle file selection - images AND documents
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     // Check file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image is too large. Please choose an image under 10MB.');
+      alert('File is too large. Please choose a file under 10MB.');
       return;
     }
 
-    // Preview
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setImagePreview(event.target.result);
-      setSelectedImage(file);
-    };
-    reader.readAsDataURL(file);
+    // Check if it's an image
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImagePreview(event.target.result);
+        setSelectedImage(file);
+        setSelectedFile(null);
+        setFilePreviewName(null);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // It's a document - show filename
+      setSelectedFile(file);
+      setFilePreviewName(file.name);
+      setSelectedImage(null);
+      setImagePreview(null);
+    }
 
     // Reset file input so user can re-select the same file
     e.target.value = '';
   };
 
-  const removeImage = () => {
+  const removeFile = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setSelectedFile(null);
+    setFilePreviewName(null);
   };
 
   // Convert File to base64 for sending to API
@@ -106,15 +121,17 @@ export default function ChatPage() {
   // Send message handler — calls DeepSeek via backend proxy
   const handleSend = async () => {
     const message = input.trim();
-    if ((!message && !selectedImage) || loading) return;
+    if ((!message && !selectedImage && !selectedFile) || loading || fileUploading) return;
 
     setInput('');
     setShowSuggestions(false);
 
-    // Build user message content
+    // Build user message text
     let userMessageText = message;
     if (!message && selectedImage) {
       userMessageText = "I've shared an image — can you help me with this?";
+    } else if (!message && selectedFile) {
+      userMessageText = `I've shared a file: ${selectedFile.name} — can you help me with this?`;
     }
 
     // Add user message to chat
@@ -123,6 +140,31 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
+      let docText = null;
+      let fileName = null;
+
+      // If it's a document, upload to /api/read-file first
+      if (selectedFile) {
+        setFileUploading(true);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const uploadRes = await fetch(`${API_BASE}/api/read-file`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error('Failed to read file');
+        }
+
+        const fileData = await uploadRes.json();
+        docText = fileData.text;
+        fileName = fileData.fileName;
+        setFileUploading(false);
+        removeFile();
+      }
+
       // Send to backend API
       const body = {
         message: userMessageText,
@@ -132,11 +174,17 @@ export default function ChatPage() {
         }))
       };
 
+      // Add document text if present
+      if (docText) {
+        body.docText = docText;
+        body.fileName = fileName;
+      }
+
       // Add image if selected
       if (selectedImage) {
         const base64Image = await fileToBase64(selectedImage);
         body.image = base64Image;
-        removeImage();
+        removeFile();
       }
 
       const res = await fetch(AI_API_ENDPOINT, {
@@ -148,6 +196,7 @@ export default function ChatPage() {
       let responseText = '';
       let parsedEvent = null;
       let parsedBook = null;
+      let parsedContact = null;
 
       if (res.ok) {
         const data = await res.json();
@@ -178,6 +227,17 @@ export default function ChatPage() {
         }
         // Remove the book block from the display message
         responseText = responseText.replace(/===BOOK===\n?[\s\S]*?\n?===END===/, '').trim();
+      }
+
+      // Check for embedded contact additions
+      const contactMatch = responseText.match(/===CONTACT===\n?([\s\S]*?)\n?===END===/);
+      if (contactMatch) {
+        try {
+          parsedContact = JSON.parse(contactMatch[1]);
+        } catch (e) {
+          console.warn('Failed to parse contact block:', e);
+        }
+        responseText = responseText.replace(/===CONTACT===\n?[\s\S]*?\n?===END===/, '').trim();
       }
 
       addChatMessage({ role: 'assistant', message: responseText });
@@ -218,11 +278,29 @@ export default function ChatPage() {
           message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}. Check your Books page to see your reading stats! 📚`
         });
       }
+
+      // If Spring extracted a contact, add it
+      if (parsedContact && parsedContact.name) {
+        addContact({
+          name: parsedContact.name,
+          phone: parsedContact.phone || '',
+          email: parsedContact.email || '',
+          relationship: parsedContact.relationship || 'other',
+          company: parsedContact.company || '',
+          title: parsedContact.title || '',
+          notes: parsedContact.notes || '',
+          tags: parsedContact.tags || [],
+        });
+        addChatMessage({
+          role: 'assistant',
+          message: `✅ **Saved contact!** "${parsedContact.name}"${parsedContact.company ? ` from ${parsedContact.company}` : ''} has been added to your Contacts. Check your Contacts page! 📇`
+        });
+      }
     } catch (err) {
-      // Fallback if API is down
+      // Fallback if API is down - Brian's computer is off
       addChatMessage({
         role: 'assistant',
-        message: "I'm having trouble connecting to my brain right now. Please make sure the Compass API server is running (`node server.js` in the compass directory). 🙏"
+        message: "⚠️ **Spring is offline** — Brian's computer is turned off. Please start it up! Once his machine is back on, I'll be here to help you plan activities, manage your calendar, and everything else. 🌸"
       });
     } finally {
       setLoading(false);
@@ -266,7 +344,7 @@ export default function ChatPage() {
         .catch(() => {
           addChatMessage({
             role: 'assistant',
-            message: "Hi Amanda! I'm Spring, your activities planning assistant. I'd love to help you plan something wonderful today!"
+            message: "⚠️ **Spring is offline** — Brian's computer is turned off. Please start it up! Once his machine is back on, I'll be here to help. 🌸"
           });
         })
         .finally(() => setLoading(false));
@@ -436,38 +514,59 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Image preview */}
+      {/* File preview - image or document */}
       {imagePreview && (
         <div className="mb-2 relative inline-block">
           <div className="relative rounded-xl overflow-hidden border border-purple-300/30 shadow-md">
             <img src={imagePreview} alt="Preview" className="max-h-32 w-auto object-contain" />
             <button
-              onClick={removeImage}
+              onClick={removeFile}
               className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
             >
               <X size={14} />
             </button>
           </div>
-          <p className="text-[10px] text-dark-muted mt-1">Image attached — will be sent with your message</p>
+          <p className="text-[10px] text-dark-muted mt-1">Image attached</p>
+        </div>
+      )}
+      {filePreviewName && (
+        <div className="mb-2 relative inline-block">
+          <div className="relative rounded-xl overflow-hidden border border-amber-500/30 bg-amber-900/20 shadow-md px-4 py-3">
+            <div className="flex items-center gap-3 pr-6">
+              <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-sm text-amber-200 font-medium truncate max-w-[200px]">{filePreviewName}</p>
+                <p className="text-[10px] text-amber-400/70">{fileUploading ? 'Reading file...' : 'Ready to send'}</p>
+              </div>
+            </div>
+            <button
+              onClick={removeFile}
+              className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
       )}
 
       {/* Input area */}
       <div className="bg-dark-card rounded-xl border border-dark-border shadow-md p-2">
         <div className="flex items-end gap-2">
-          {/* Image upload button */}
+          {/* File upload button - images + docs */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2.5 text-dark-muted hover:text-purple-400 hover:bg-dark-hover rounded-lg transition-colors flex-shrink-0"
-            title="Attach image"
+            title="Attach image or document"
           >
             <ImagePlus size={20} />
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
-            onChange={handleImageSelect}
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.md"
+            onChange={handleFileSelect}
             className="hidden"
           />
 
@@ -488,11 +587,11 @@ export default function ChatPage() {
 
           <button
             onClick={handleSend}
-            disabled={(!input.trim() && !selectedImage) || loading}
+            disabled={(!input.trim() && !selectedImage && !selectedFile) || loading || fileUploading}
             className="p-2.5 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 shadow-md"
             title="Send message"
           >
-            {loading ? (
+            {loading || fileUploading ? (
               <Loader2 size={18} className="animate-spin" />
             ) : (
               <Send size={18} />
@@ -504,7 +603,7 @@ export default function ChatPage() {
         <div className="px-3 pb-1">
           <p className="text-[10px] text-dark-muted flex items-center gap-1">
             <CornerDownLeft size={10} />
-            Enter to send · Shift+Enter for new line · 📷 Attach images for Spring to analyze
+            Enter to send · Shift+Enter for new line · 📎 Attach images, PDFs, Word docs, or Excel files
           </p>
         </div>
       </div>

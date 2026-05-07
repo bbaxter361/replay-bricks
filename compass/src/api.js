@@ -9,3 +9,5 @@ export const API = {
   canvaAuthUrl: `${API_BASE}/api/canva/auth-url`,
   health: `${API_BASE}/api/health`,
 };
+
+export { API_BASE };

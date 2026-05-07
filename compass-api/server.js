@@ -6,6 +6,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
+import { createRequire } from 'module';
+const require_ = createRequire(import.meta.url);
+const pdfParse = require_('pdf-parse');
+const mammoth = require_('mammoth');
+const XLSX = require_('xlsx');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -86,12 +91,30 @@ When Amanda uploads an image (bingo buck form, calendar, activity sheet, busines
 - Describe what you see in the image
 - If it's a calendar or schedule, offer to add events based on what you read
 - If it's a form, help her understand and fill it out
-- Be thorough — she relies on your observations`;
+- Be thorough — she relies on your observations
+
+## DOCUMENT PROCESSING
+When Amanda uploads a document (PDF, Word doc, Excel spreadsheet, text file, etc.):
+- Read the extracted text carefully and thoroughly
+- If it's a schedule or calendar, summarize it and offer to add events
+- If it's a list of residents or contacts, acknowledge it and help organize the info
+- If it's a form or worksheet, explain what it contains and help fill it out
+- If it's an Excel file, mention any tables or data you see
+- Always acknowledge what the document is and offer specific help based on its content
+
+## CONTACT SYSTEM
+Amanda tracks contacts for residents, family members, doctors, and staff. Each contact has name, phone, email, relationship type (resident/family/doctor/staff), company, job title, notes, and tags.
+- When Amanda shares a business card image or contact info, extract the details
+- If she asks you to save a contact, append a ===CONTACT=== JSON block:
+===CONTACT===
+{"name": "Jane Smith", "phone": "(555) 123-4567", "email": "jane@example.com", "relationship": "doctor", "company": "City Medical", "title": "Neurologist", "notes": "Specializes in dementia care"}
+===END===
+- You can also suggest adding tags like "memory-care", "specialist", etc.`;
 
 // ── Chat endpoint ──
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, image, history } = req.body;
+    const { message, image, docText, fileName, history } = req.body;
 
     if (!DEEPSEEK_API_KEY) {
       return res.json({
@@ -107,7 +130,11 @@ app.post('/api/chat', async (req, res) => {
 
     // Add current user message
     const userContent = [];
-    if (message) userContent.push({ type: 'text', text: message });
+    if (docText && fileName) {
+      userContent.push({ type: 'text', text: `[File: ${fileName}]\n\nContents of the uploaded file:\n\`\`\`\n${docText.substring(0, 50000)}\n\`\`\`\n\n${message || 'Please review this document and help me with it.'}` });
+    } else if (message) {
+      userContent.push({ type: 'text', text: message });
+    }
     if (image) {
       const imageData = image.replace(/^data:image\/\w+;base64,/, '');
       userContent.push({
@@ -158,6 +185,93 @@ app.post('/api/contact', (req, res) => {
   const { name, email, message } = req.body;
   console.log('📧 New contact form submission:', { name, email, message: message?.substring(0, 200) });
   res.json({ ok: true, message: 'Message received. We\'ll get back to you soon!' });
+});
+
+// ── Read uploaded file ──
+app.post('/api/read-file', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const filePath = req.file.path;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let text = '';
+
+    console.log(`📄 Reading file: ${req.file.originalname} (${ext})`);
+
+    switch (ext) {
+      case '.pdf': {
+        const buf = fs.readFileSync(filePath);
+        const data = await pdfParse(buf);
+        text = data.text || '';
+        break;
+      }
+      case '.docx': {
+        const result = await mammoth.extractRawText({ path: filePath });
+        text = result.value || '';
+        break;
+      }
+      case '.xlsx':
+      case '.xls': {
+        const workbook = XLSX.readFile(filePath);
+        const sheets = [];
+        workbook.SheetNames.forEach(name => {
+          const sheet = workbook.Sheets[name];
+          const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          if (json.length > 0) {
+            sheets.push(`--- Sheet: ${name} ---`);
+            json.forEach(row => {
+              if (row.some(cell => cell !== undefined && cell !== '')) {
+                sheets.push(row.join(' | '));
+              }
+            });
+          }
+        });
+        text = sheets.join('\n');
+        break;
+      }
+      case '.csv': {
+        const csvContent = fs.readFileSync(filePath, 'utf8');
+        text = csvContent;
+        break;
+      }
+      case '.txt':
+      case '.rtf':
+      case '.md':
+      case '.json':
+      case '.xml': {
+        text = fs.readFileSync(filePath, 'utf8');
+        break;
+      }
+      default: {
+        // Try reading as text for unknown types
+        try {
+          text = fs.readFileSync(filePath, 'utf8');
+        } catch {
+          text = `[Unsupported file type: ${ext}. Unable to extract text.]`;
+        }
+      }
+    }
+
+    // Clean up uploaded file
+    try { fs.unlinkSync(filePath); } catch {}
+
+    // Trim very long text
+    const maxLen = 100000;
+    if (text.length > maxLen) {
+      text = text.substring(0, maxLen) + `\n\n[...truncated: original was ${text.length} characters]`;
+    }
+
+    console.log(`✅ Extracted ${text.length} characters from ${req.file.originalname}`);
+    res.json({ text, fileName: req.file.originalname, length: text.length });
+
+  } catch (err) {
+    console.error('❌ File read error:', err);
+    // Clean up on error too
+    if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch {}
+    res.status(500).json({ error: 'Failed to read file', details: err.message });
+  }
 });
 
 // ── Canva Autofill ──
