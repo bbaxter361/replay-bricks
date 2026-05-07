@@ -1,9 +1,9 @@
-app = "compass-api"
+app = "replaybricks-api"
 primary_region = "iad"
 
 [build]
-  builder = "heroku/buildpacks:20"
-  
+  dockerfile = "Dockerfile"
+
 [http_service]
   internal_port = 3001
   force_https = true
