@@ -1,6 +1,6 @@
 // API configuration for Compass app
-// Change this to your deployed API server URL
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// Uses replaybrick.com's API proxy so it works from any network
+const API_BASE = 'https://replaybrick.com';
 
 export const API = {
   chat: `${API_BASE}/api/chat`,
@@ -8,6 +8,7 @@ export const API = {
   contact: `${API_BASE}/api/contact`,
   canvaAuthUrl: `${API_BASE}/api/canva/auth-url`,
   health: `${API_BASE}/api/health`,
+  readFile: `${API_BASE}/api/read-file`,
 };
 
 export { API_BASE };

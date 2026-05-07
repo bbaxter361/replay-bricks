@@ -10,6 +10,18 @@
 [build.processing.html]
   pretty_urls = true
 
+# Netlify Functions
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# API proxy — route all /api/* through the function to Fly.io
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api-proxy"
+  status = 200
+
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
