@@ -14,14 +14,15 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
 
-# API proxy — route all /api/* through the function to Fly.io
+# API — route all /api/* through Spring function
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api-proxy"
+  to = "/.netlify/functions/spring"
   status = 200
 
-# SPA fallback
+# SPA fallback — everything else goes to index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
