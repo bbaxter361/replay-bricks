@@ -2,4 +2,7 @@ node_modules/
 website/.netlify/
 .netlify/
 compass/.netlify/
+compass/dist/
+compass-api/.env
 *.zip
+*.log
