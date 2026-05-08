@@ -1,8 +1,7 @@
 # Main Replay Bricks website
 [build]
-  base = "website"
-  publish = "dist"
-  command = "npm run build"
+  command = "cd website && npm run build"
+  publish = "website/dist"
 
 [build.processing]
   skip_processing = false
@@ -10,10 +9,10 @@
 [build.processing.html]
   pretty_urls = true
 
-# Netlify Functions — directory set relative to build base (website/)
+# Netlify Functions
 [functions]
-  directory = "netlify/functions"
   node_bundler = "esbuild"
+  directory = "netlify/functions"
   external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
 
 # API — route all /api/* through Spring function
