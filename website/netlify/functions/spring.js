@@ -40,6 +40,18 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
+// ── API Key Auth Middleware ──
+// Protects all endpoints except health check
+// Set SPRING_API_KEY as a Netlify env var to enable. Leave empty to disable.
+function apiKeyAuth(req, res, next) {
+  if (!SPRING_API_KEY) return next(); // Auth disabled — no key configured
+  const provided = req.headers['x-api-key'];
+  if (!provided || provided !== SPRING_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized. Provide x-api-key header.' });
+  }
+  next();
+}
+
 // ── AI Configuration ──
 // Spring uses DeepSeek directly — cheap and fast for Amanda's needs
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
@@ -48,6 +60,7 @@ const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
 const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET || '';
 const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI || 'https://api.replaybrick.com/api/canva/callback';
+const SPRING_API_KEY = process.env.SPRING_API_KEY || '';
 
 // ── AI Call with vision support ──
 async function callAI(systemPrompt, userMessage, imageBase64, history) {
@@ -171,7 +184,7 @@ async function getBlobStore() {
 }
 
 // ── Chat endpoint ──
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', apiKeyAuth, async (req, res) => {
   try {
     const { message, image, docText, fileName, history } = req.body;
 
@@ -204,14 +217,14 @@ app.post('/api/chat', async (req, res) => {
 });
 
 // ── Contact Form ──
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', apiKeyAuth, (req, res) => {
   const { name, email, message } = req.body;
   console.log('📧 New contact form submission:', { name, email, message: message?.substring(0, 200) });
   res.json({ ok: true, message: 'Message received. We\'ll get back to you soon!' });
 });
 
 // ── Read uploaded file ──
-app.post('/api/read-file', upload.single('file'), async (req, res) => {
+app.post('/api/read-file', apiKeyAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -295,7 +308,7 @@ app.post('/api/read-file', upload.single('file'), async (req, res) => {
 });
 
 // ── Blobs: Save data ──
-app.post('/api/data/save', async (req, res) => {
+app.post('/api/data/save', apiKeyAuth, async (req, res) => {
   try {
     const { key, value } = req.body;
     const store = await getBlobStore();
@@ -311,7 +324,7 @@ app.post('/api/data/save', async (req, res) => {
 });
 
 // ── Blobs: Get data ──
-app.get('/api/data/:key', async (req, res) => {
+app.get('/api/data/:key', apiKeyAuth, async (req, res) => {
   try {
     const store = await getBlobStore();
     let data;
@@ -328,7 +341,7 @@ app.get('/api/data/:key', async (req, res) => {
 });
 
 // ── Blobs: List all keys ──
-app.get('/api/data', async (req, res) => {
+app.get('/api/data', apiKeyAuth, async (req, res) => {
   try {
     const store = await getBlobStore();
     let keys;
@@ -376,7 +389,7 @@ async function getCanvaToken() {
   }
 }
 
-app.post('/api/canva/autofill', async (req, res) => {
+app.post('/api/canva/autofill', apiKeyAuth, async (req, res) => {
   try {
     const { designId, events } = req.body;
     if (!designId) return res.status(400).json({ error: 'designId required' });
