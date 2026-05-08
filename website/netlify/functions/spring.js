@@ -8,17 +8,17 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { createRequire } from 'module';
 import { getStore } from '@netlify/blobs';
 
-const require_ = createRequire(import.meta.url);
+// CJS compatibility: Netlify bundles functions to CJS where import.meta.url is empty
+import { createRequire } from 'module';
+const require_ = createRequire(typeof __filename !== 'undefined' ? __filename : '/');
 const pdfParse = require_('pdf-parse');
 const mammoth = require_('mammoth');
 const XLSX = require_('xlsx');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = typeof __dirname !== 'undefined' ? __dirname : '.';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
