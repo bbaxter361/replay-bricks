@@ -1,7 +1,7 @@
 // Spring — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
-// Uses Anthropic Claude via AI Gateway
+// Uses DeepSeek v4 Flash — cheap and fast for Amanda's needs
 
 import serverless from 'serverless-http';
 import express from 'express';
@@ -47,6 +47,7 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
 const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET || '';
+const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI || 'https://api.replaybrick.com/api/canva/callback';
 
 // ── AI Call with vision support ──
 async function callAI(systemPrompt, userMessage, imageBase64, history) {
@@ -360,7 +361,7 @@ async function getCanvaToken() {
         client_id: CANVA_CLIENT_ID,
         client_secret: CANVA_CLIENT_SECRET,
         code: process.env.CANVA_AUTH_CODE || '',
-        redirect_uri: `https://api.replaybrick.com/api/canva/callback`
+        redirect_uri: CANVA_REDIRECT_URI
       })
     });
     if (tokenResponse.ok) {
@@ -444,8 +445,7 @@ export { handler };
 if (process.env.NETLIFY_DEV !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌱 Spring running on port ${PORT}`);
-    console.log(`🤖 Claude: ${process.env.ANTHROPIC_API_KEY ? '✅ AI Gateway' : '❌ Not configured'}`);
-    console.log(`🤖 DeepSeek fallback: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 DeepSeek: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
   });
 }
