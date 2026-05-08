@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Trash2, Upload, X, Phone, Mail, Tag, User, Camera, Sparkles } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API } from '../api';
+import { API, apiFetch } from '../api';
 
 const relationshipColors = {
   resident: { bg: 'bg-teal-600/20', text: 'text-teal-300', dot: 'bg-teal-500', gradient: 'from-teal-400 to-teal-500' },
@@ -153,7 +153,7 @@ export default function ContactDetailPage() {
     try {
       // Send to Spring via the chat endpoint with the image
       const base64 = imageData.split(',')[1];
-      const res = await fetch(API.chat, {
+      const res = await apiFetch(API.chat, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

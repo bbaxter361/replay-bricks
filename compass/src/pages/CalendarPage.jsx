@@ -24,7 +24,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API } from '../api';
+import { API, apiFetch } from '../api';
 import { v4 as uuidv4 } from 'uuid';
 import jsPDF from 'jspdf';
 
@@ -397,7 +397,7 @@ export default function CalendarPage() {
         month: moment(e.start).format('MMMM YYYY'),
       }));
 
-      const res = await fetch(API.canvaAutofill, {
+      const res = await apiFetch(API.canvaAutofill, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
