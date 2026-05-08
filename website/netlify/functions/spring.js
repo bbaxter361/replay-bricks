@@ -1,7 +1,7 @@
 // Spring — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
-// Uses DeepSeek v4 Flash — cheap and fast for Amanda's needs
+// Uses DeepSeek V4 Pro — upgraded while the 75% off promo runs til May 31
 
 import serverless from 'serverless-http';
 import express from 'express';
@@ -56,7 +56,7 @@ function apiKeyAuth(req, res, next) {
 // Spring uses DeepSeek directly — cheap and fast for Amanda's needs
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEEPSEEK_MODEL = 'deepseek-v4-pro';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
 const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET || '';
 const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI || 'https://api.replaybrick.com/api/canva/callback';
@@ -444,7 +444,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'Spring (Netlify)',
     version: '2.0.0',
-    model: 'deepseek-v4-flash',
+    model: 'deepseek-v4-pro',
     blobs: true,
   });
 });
@@ -458,7 +458,7 @@ export { handler };
 if (process.env.NETLIFY_DEV !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌱 Spring running on port ${PORT}`);
-    console.log(`🤖 DeepSeek: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 DeepSeek V4 Pro: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
   });
 }
