@@ -1,7 +1,8 @@
 // API configuration for Compass app
-// Spring now lives on Netlify alongside the website at replaybrick.com
-// No more Fly.io dependency — one deploy, one place
-const API_BASE = 'https://replaybrick.com';
+// Spring now lives on Netlify as replaybricksv2
+// All requests include the API key for authentication
+
+const API_BASE = 'https://replaybricksv2.netlify.app';
 
 export const API = {
   chat: `${API_BASE}/api/chat`,
@@ -16,3 +17,21 @@ export const API = {
 };
 
 export { API_BASE };
+
+/**
+ * apiFetch - wrapper around fetch that automatically includes the API key header.
+ * Usage: apiFetch(url, options) — same as fetch() but x-api-key is always set.
+ */
+const API_KEY = 'spring-vicki-2026';
+
+export async function apiFetch(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+    'x-api-key': API_KEY,
+  };
+
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}

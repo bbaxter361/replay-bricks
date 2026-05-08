@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API, API_BASE } from '../api';
+import { API, API_BASE, apiFetch } from '../api';
 
 // Color lookup for event types
 const typeColors = {
@@ -149,7 +149,7 @@ export default function ChatPage() {
         const formData = new FormData();
         formData.append('file', selectedFile);
 
-        const uploadRes = await fetch(`${API_BASE}/api/read-file`, {
+        const uploadRes = await apiFetch(`${API_BASE}/api/read-file`, {
           method: 'POST',
           body: formData
         });
@@ -187,7 +187,7 @@ export default function ChatPage() {
         removeFile();
       }
 
-      const res = await fetch(AI_API_ENDPOINT, {
+      const res = await apiFetch(AI_API_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -297,10 +297,9 @@ export default function ChatPage() {
         });
       }
     } catch (err) {
-      // Fallback if API is down - Brian's computer is off
       addChatMessage({
         role: 'assistant',
-        message: "⚠️ **Spring is offline** — Brian's computer is turned off. Please start it up! Once his machine is back on, I'll be here to help you plan activities, manage your calendar, and everything else. 🌸"
+        message: "I'm having trouble connecting right now. Let me try again — give me a moment! 🌸"
       });
     } finally {
       setLoading(false);
@@ -326,7 +325,7 @@ export default function ChatPage() {
       setLoading(true);
 
       // Send to backend
-      fetch(AI_API_ENDPOINT, {
+      apiFetch(AI_API_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -344,7 +343,7 @@ export default function ChatPage() {
         .catch(() => {
           addChatMessage({
             role: 'assistant',
-            message: "⚠️ **Spring is offline** — Brian's computer is turned off. Please start it up! Once his machine is back on, I'll be here to help. 🌸"
+            message: "I'm having trouble connecting right now. Give me a moment and try again! 🌸"
           });
         })
         .finally(() => setLoading(false));
