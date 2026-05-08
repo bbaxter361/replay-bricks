@@ -10,9 +10,8 @@
 [build.processing.html]
   pretty_urls = true
 
-# Netlify Functions
+# Netlify Functions — using default location at netlify/functions/
 [functions]
-  directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
 
