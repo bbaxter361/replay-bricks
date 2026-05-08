@@ -4,7 +4,7 @@ const MARKETPLACES = [
   {
     name: 'BrickLink',
     desc: 'The world\'s largest LEGO marketplace. Shop our complete inventory of sets, minifigures, and parts.',
-    url: 'https://www.bricklink.com',
+    url: 'https://store.bricklink.com/replay1138#/shop',
     username: '@ReplayBricks',
     color: '#E3000B',
     gradient: 'from-red-600 to-red-800',
@@ -27,7 +27,7 @@ const MARKETPLACES = [
   {
     name: 'Brick Owl',
     desc: 'Another trusted LEGO marketplace with a great community. Find our full catalog here too.',
-    url: 'https://www.brickowl.com',
+    url: 'https://replaybricks.brickowl.com/',
     username: '@ReplayBricks',
     color: '#FFD700',
     gradient: 'from-yellow-500 to-amber-600',

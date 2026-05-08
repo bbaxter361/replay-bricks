@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { id: 'news', label: 'News' },
-  { id: 'about', label: 'About' },
   { id: 'products', label: 'Products' },
   { id: 'marketplaces', label: 'Shop' },
+  { id: 'about', label: 'About' },
   { id: 'newsletter', label: 'Newsletter' },
   { id: 'contact', label: 'Contact' },
 ];

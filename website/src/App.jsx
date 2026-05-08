@@ -24,7 +24,7 @@ function HomePage() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'about', 'products', 'marketplaces', 'news', 'newsletter', 'contact'];
+      const sections = ['hero', 'news', 'products', 'marketplaces', 'about', 'newsletter', 'contact'];
       const scrollPos = window.scrollY + 200;
 
       for (let i = sections.length - 1; i >= 0; i--) {
@@ -46,10 +46,10 @@ function HomePage() {
       <Navbar currentSection={currentSection} showLogin />
       <main>
         <Hero />
-        <About />
         <LegoNews />
         <Products />
         <Marketplaces />
+        <About />
         <Newsletter />
         <Contact />
       </main>

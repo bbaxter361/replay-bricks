@@ -49,7 +49,7 @@ export default function CompassPage({ user, onLogout }) {
       {/* App iframe */}
       <div className="flex-1 relative">
         <iframe
-          src="http://localhost:5174?auto=true"
+          src="https://compass-replaybricks.netlify.app?auto=true"
           className="absolute inset-0 w-full h-full border-0"
           title="Compass Memory Care"
         />

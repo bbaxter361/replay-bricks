@@ -1,71 +1,102 @@
 #!/usr/bin/env bash
-# Start Replay Bricks Compass API server and Cloudflare tunnel
-# Run this after WSL starts up: bash ~/workspace/replay-bricks/start-api.sh
+# Start Compass API Server + Cloudflare Tunnel
+# This script keeps the terminal window open to show status
 
 set -e
 
-API_DIR="/home/bbaxter/workspace/replay-bricks/compass-api"
-COMPASS_DIR="/home/bbaxter/workspace/replay-bricks/compass"
+API_DIR="$HOME/workspace/replay-bricks/compass-api"
 TUNNEL_LOG="/tmp/cloudflared.log"
+START_LOG="/tmp/compass-start.log"
 
-echo "🚀 Starting Compass API server..."
+echo "╔══════════════════════════════════════════════════╗"
+echo "║     Compass API Server - Replay Bricks          ║"
+echo "╚══════════════════════════════════════════════════╝"
+echo ""
 
-# Kill any existing processes
+# Cleanup old processes
+echo "🔄 Cleaning up old processes..."
 pkill -f "node server.js" 2>/dev/null || true
 pkill -f cloudflared 2>/dev/null || true
 sleep 1
 
-# Load API key
+# API key from .env or fallback
 DEEPSEEK_API_KEY="sk-927c40f732ae4322ac74d5950459bc43"
 
 # Start API server
+echo "🚀 Starting API server..."
 cd "$API_DIR"
 DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" PORT=3001 node server.js &
 API_PID=$!
-echo "   API server started (PID: $API_PID)"
+echo "   PID: $API_PID"
 
-# Wait for server to be ready
+# Wait for server
 sleep 2
 
-# Start Cloudflare tunnel (log to file)
+# Start tunnel
+echo "🌐 Starting Cloudflare tunnel..."
 rm -f "$TUNNEL_LOG"
-nohup cloudflared tunnel --url http://localhost:3001 >> "$TUNNEL_LOG" 2>&1 &
+cloudflared tunnel --url http://localhost:3001 >> "$TUNNEL_LOG" 2>&1 &
 TUNNEL_PID=$!
-echo "   Cloudflare tunnel started (PID: $TUNNEL_PID)"
+echo "   PID: $TUNNEL_PID"
 
 # Wait for tunnel URL
-echo "   Waiting for tunnel URL..."
-for i in $(seq 1 15); do
+echo ""
+echo "⏳ Waiting for tunnel URL..."
+for i in $(seq 1 20); do
   TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | tail -1)
   if [ -n "$TUNNEL_URL" ]; then
-    echo "✅ Tunnel URL: $TUNNEL_URL"
+    echo ""
+    echo "✅ TUNNEL URL: $TUNNEL_URL"
+    echo "   ⚠️  If this URL changed, rebuild Compass:"
+    echo "   bash ~/workspace/replay-bricks/deploy-compass.sh $TUNNEL_URL"
+    echo ""
     break
   fi
   sleep 1
 done
 
 if [ -z "$TUNNEL_URL" ]; then
-  echo "❌ Failed to get tunnel URL"
+  echo "❌ Failed to get tunnel URL - check /tmp/cloudflared.log"
+  echo "\$ cat $TUNNEL_LOG"
   exit 1
 fi
 
-# Test the tunnel
-echo "   Testing tunnel..."
-sleep 3
-HEALTH=$(curl -s "${TUNNEL_URL}/api/health" 2>/dev/null || echo "fail")
+# Test the API
+sleep 2
+HEALTH=$(curl -s "${TUNNEL_URL}/api/health" 2>/dev/null || echo "")
 if echo "$HEALTH" | grep -q '"ok"'; then
-  echo "✅ API is reachable at $TUNNEL_URL"
+  echo "✅ API health check: OK"
 else
-  echo "⚠️  API health check returned: $HEALTH"
+  echo "⚠️  Health check: $HEALTH"
 fi
 
 echo ""
-echo "📋 Summary:"
-echo "   API Server:    http://localhost:3001"
-echo "   Public URL:    $TUNNEL_URL"
-echo "   Health check:  ${TUNNEL_URL}/api/health"
+echo "╔══════════════════════════════════════════════════╗"
+echo "║  ✅ SERVER IS RUNNING                           ║"
+echo "║                                                ║"
+echo "║  🖥️  Local:  http://localhost:3001              ║"
+echo "║  🌐  Public: $TUNNEL_URL"
+echo "║                                                ║"
+echo "║  The Compass app is at:                         ║"
+echo "║  https://compass-replaybricks.netlify.app       ║"
+echo "║                                                ║"
+echo "║  Close this window to stop the server.          ║"
+echo "╚══════════════════════════════════════════════════╝"
 echo ""
-echo "⚠️  If the tunnel URL changed from the previous one,"
-echo "   rebuild Compass frontend with:"
-echo "   cd $COMPASS_DIR && VITE_API_URL=$TUNNEL_URL npm run build"
-echo "   Then deploy to Netlify from the Desktop/compass-deploy folder"
+
+# Keep running - show tunnel logs
+echo "📡 Tunnel active. Ctrl+C to stop."
+while true; do
+  sleep 60
+  # Check if processes are still running
+  if ! kill -0 $API_PID 2>/dev/null; then
+    echo "⚠️  API server died! Restarting..."
+    DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" PORT=3001 node server.js &
+    API_PID=$!
+  fi
+  if ! kill -0 $TUNNEL_PID 2>/dev/null; then
+    echo "⚠️  Tunnel died! Restarting..."
+    cloudflared tunnel --url http://localhost:3001 >> "$TUNNEL_LOG" 2>&1 &
+    TUNNEL_PID=$!
+  fi
+done

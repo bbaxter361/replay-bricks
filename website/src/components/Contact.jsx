@@ -95,7 +95,10 @@ export default function Contact() {
             </div>
             {/* Math captcha - anti-spam */}
             <div>
-              <div className="flex items-center gap-3 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Prove you're human <span className="text-[#E3000B]">*</span>
+              </label>
+              <div className="flex items-center gap-3">
                 <span className="text-white font-medium text-sm bg-[#0f0f1a] px-3 py-1.5 rounded-lg border border-white/10">
                   {captchaA} + {captchaB} = ?
                 </span>

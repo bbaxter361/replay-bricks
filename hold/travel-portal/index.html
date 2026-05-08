@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travel Portal — Replay Bricks</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#0f0f1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;}
+    .container{max-width:900px;margin:0 auto;padding:40px 20px;}
+    h1{font-size:2rem;font-weight:700;color:#fff;margin-bottom:4px;}
+    .subtitle{color:#888;font-size:.9rem;margin-bottom:32px;}
+    .search-card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:16px;padding:28px;margin-bottom:24px;}
+    .search-card h2{font-size:1.1rem;color:#c084fc;margin-bottom:16px;font-weight:600;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+    .field{flex:1;min-width:140px;}
+    .field label{display:block;font-size:.75rem;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+    .field input,.field select{width:100%;padding:10px 12px;background:#0f0f1a;border:1px solid #2a2a4a;border-radius:8px;color:#e0e0e0;font-size:.9rem;}
+    .field input:focus,.field select:focus{outline:none;border-color:#c084fc;}
+    .tabs{display:flex;gap:4px;margin-bottom:24px;background:#1a1a2e;border-radius:12px;padding:4px;}
+    .tab{flex:1;padding:10px;text-align:center;border-radius:8px;font-size:.85rem;font-weight:500;cursor:pointer;transition:all .15s;border:none;background:transparent;color:#888;}
+    .tab.active{background:#c084fc;color:#0f0f1a;font-weight:600;}
+    .tab:hover:not(.active){background:#2a2a4a;color:#e0e0e0;}
+    .btn-search{background:#c084fc;color:#0f0f1a;border:none;border-radius:8px;padding:10px 28px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s;}
+    .btn-search:hover{background:#a855f7;}
+    .btn-search:disabled{opacity:.4;cursor:not-allowed;}
+    .results{margin-top:24px;}
+    .result-card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:18px;margin-bottom:12px;}
+    .result-card h3{color:#fff;font-size:1rem;margin-bottom:4px;}
+    .result-price{color:#4ade80;font-size:1.3rem;font-weight:700;}
+    .result-info{color:#888;font-size:.85rem;}
+    .result-link{display:inline-block;margin-top:8px;padding:6px 16px;background:#c084fc;color:#0f0f1a;border-radius:6px;text-decoration:none;font-size:.8rem;font-weight:600;}
+    .loading{text-align:center;color:#888;padding:40px;}
+    .loading .spinner{width:32px;height:32px;border:3px solid #2a2a4a;border-top-color:#c084fc;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .history{margin-top:20px;}
+    .history h3{color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+    .history-item{display:flex;justify-content:space-between;padding:8px 12px;border-radius:8px;background:#1a1a2e;border:1px solid #2a2a4a;margin-bottom:4px;font-size:.8rem;cursor:pointer;}
+    .history-item:hover{border-color:#c084fc;}
+    .history-item .dest{color:#e0e0e0;}
+    .history-item .date{color:#888;}
+    .clearfix::after{content:"";clear:both;display:table;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>✈️ Travel Portal</h1>
+    <p class="subtitle">Search cruises and Colorado trips — powered by Vicki</p>
+
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="cruise" onclick="switchTab('cruise')">🚢 Cruises</button>
+      <button class="tab" data-tab="colorado" onclick="switchTab('colorado')">⛰️ Colorado</button>
+    </div>
+
+    <!-- CRUISE SEARCH -->
+    <div class="search-card" id="tab-cruise">
+      <h2>Find a Cruise</h2>
+      <div class="row">
+        <div class="field">
+          <label>Destination</label>
+          <select id="cruise-dest">
+            <option value="caribbean">Caribbean</option>
+            <option value="alaska">Alaska</option>
+            <option value="bahamas">Bahamas</option>
+            <option value="mexico">Mexican Riviera</option>
+            <option value="europe">Europe / Mediterranean</option>
+            <option value="hawaii">Hawaii</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Month</label>
+          <select id="cruise-month">
+            <option value="2026-06">June 2026</option>
+            <option value="2026-07" selected>July 2026</option>
+            <option value="2026-08">August 2026</option>
+            <option value="2026-09">September 2026</option>
+            <option value="2026-10">October 2026</option>
+            <option value="2026-11">November 2026</option>
+            <option value="2026-12">December 2026</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Duration</label>
+          <select id="cruise-dur">
+            <option value="3">3-5 days</option>
+            <option value="7" selected>7 days</option>
+            <option value="10">10-14 days</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Passengers</label>
+          <select id="cruise-pax">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn-search" onclick="searchCruise()">🔍 Search Cruises</button>
+    </div>
+
+    <!-- COLORADO SEARCH -->
+    <div class="search-card" id="tab-colorado" style="display:none">
+      <h2>Colorado Trip</h2>
+      <div class="row">
+        <div class="field">
+          <label>From</label>
+          <input type="text" id="co-from" value="DFW" placeholder="Airport code">
+        </div>
+        <div class="field">
+          <label>To</label>
+          <select id="co-to">
+            <option value="DEN">Denver (DEN)</option>
+            <option value="COS">Colorado Springs (COS)</option>
+            <option value="MTJ">Montrose / Telluride (MTJ)</option>
+            <option value="ASE">Aspen (ASE)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Depart</label>
+          <input type="date" id="co-depart">
+        </div>
+        <div class="field">
+          <label>Return</label>
+          <input type="date" id="co-return">
+        </div>
+      </div>
+      <button class="btn-search" onclick="searchColorado()">🔍 Search Flights</button>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="results"></div>
+  </div>
+
+  <script>
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      document.getElementById('tab-cruise').style.display = name === 'cruise' ? 'block' : 'none';
+      document.getElementById('tab-colorado').style.display = name === 'colorado' ? 'block' : 'none';
+    }
+
+    function searchCruise() {
+      const dest = document.getElementById('cruise-dest').value;
+      const month = document.getElementById('cruise-month').value;
+      const results = document.getElementById('results');
+      results.innerHTML = '<div class="loading"><div class="spinner"></div>Searching Expedia, VacationsToGo, Cruises.com...</div>';
+      
+      fetch('/api/travel/search', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({type: 'cruise', destination: dest, month: month})
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.results && data.results.length) {
+          let html = '<div class="results"><h3 style="color:#c084fc;margin-bottom:12px;">Results</h3>';
+          data.results.forEach(r => {
+            html += \`<div class="result-card">
+              <h3>\${r.name}</h3>
+              <div class="result-price">\${r.price}</div>
+              <div class="result-info">\${r.details}</div>
+              <a class="result-link" href="\${r.link}" target="_blank">View Deal →</a>
+            </div>\`;
+          });
+          html += '</div>';
+          results.innerHTML = html;
+        } else {
+          results.innerHTML = '<div class="result-card" style="text-align:center;color:#888;">No results found. Try different dates or destination.</div>';
+        }
+      })
+      .catch(e => {
+        results.innerHTML = '<div class="result-card" style="text-align:center;color:#ef4444;">Search failed. Try again or use a different search.</div>';
+      });
+    }
+
+    function searchColorado() {
+      const from = document.getElementById('co-from').value;
+      const to = document.getElementById('co-to').value;
+      const depart = document.getElementById('co-depart').value;
+      const ret = document.getElementById('co-return').value;
+      const results = document.getElementById('results');
+      results.innerHTML = '<div class="loading"><div class="spinner"></div>Searching Expedia, Travelocity, Southwest...</div>';
+      
+      fetch('/api/travel/search', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({type: 'colorado', origin: from, destination: to, depart: depart, return_date: ret})
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.results && data.results.length) {
+          let html = '<div class="results"><h3 style="color:#c084fc;margin-bottom:12px;">Results</h3>';
+          data.results.forEach(r => {
+            html += \`<div class="result-card">
+              <h3>\${r.name}</h3>
+              <div class="result-price">\${r.price}</div>
+              <div class="result-info">\${r.details}</div>
+              <a class="result-link" href="\${r.link}" target="_blank">View Deal →</a>
+            </div>\`;
+          });
+          html += '</div>';
+          results.innerHTML = html;
+        } else {
+          results.innerHTML = '<div class="result-card" style="text-align:center;color:#888;">No results found. Try different dates or airports.</div>';
+        }
+      })
+      .catch(e => {
+        results.innerHTML = '<div class="result-card" style="text-align:center;color:#ef4444;">Search failed. Try again.</div>';
+      });
+    }
+  </script>
+</body>
+</html>

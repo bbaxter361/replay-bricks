@@ -10,10 +10,27 @@ export default function Newsletter() {
     alerts: false,
   });
   const [status, setStatus] = useState('idle'); // idle | loading | success | error
+  const [captchaA, setCaptchaA] = useState(0);
+  const [captchaB, setCaptchaB] = useState(0);
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaError, setCaptchaError] = useState(false);
+
+  useState(() => {
+    setCaptchaA(Math.floor(Math.random() * 10) + 1);
+    setCaptchaB(Math.floor(Math.random() * 10) + 1);
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!email) return;
+
+    // Validate captcha
+    if (parseInt(captchaAnswer) !== captchaA + captchaB) {
+      setCaptchaError(true);
+      return;
+    }
+    setCaptchaError(false);
+
     setStatus('loading');
 
     // Simulate submission — wire up to real backend later
@@ -34,6 +51,9 @@ export default function Newsletter() {
       setStatus('success');
       setEmail('');
       setName('');
+      setCaptchaAnswer('');
+      setCaptchaA(Math.floor(Math.random() * 10) + 1);
+      setCaptchaB(Math.floor(Math.random() * 10) + 1);
     }, 1000);
   };
 
@@ -186,6 +206,30 @@ export default function Newsletter() {
                       <p className="text-xs text-gray-500 mt-0.5">Urgent notifications: retiring sets, price spikes, hot deals</p>
                     </div>
                   </label>
+                </div>
+
+                {/* Math captcha - anti-spam */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Prove you're human <span className="text-[#E3000B]">*</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white font-medium text-sm bg-[#0f0f1a] px-3 py-1.5 rounded-lg border border-white/10">
+                      {captchaA} + {captchaB} = ?
+                    </span>
+                    <input
+                      type="text"
+                      value={captchaAnswer}
+                      onChange={(e) => setCaptchaAnswer(e.target.value)}
+                      placeholder="Answer"
+                      required
+                      disabled={status === 'loading'}
+                      className="w-24 px-3 py-2 bg-[#0f0f1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#E3000B] text-center"
+                    />
+                    {captchaError && (
+                      <span className="text-red-400 text-xs">Wrong answer</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Submit button */}

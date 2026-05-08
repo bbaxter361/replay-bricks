@@ -9,6 +9,7 @@ import Pricing from './pages/Pricing'
 import PartOut from './pages/PartOut'
 import Reports from './pages/Reports'
 import Marketplaces from './pages/Marketplaces'
+import TravelPortal from './pages/TravelPortal'
 import Settings from './pages/Settings'
 
 function PrivateRoute({ children }) {
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/part-out" element={<PartOut />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/marketplaces" element={<Marketplaces />} />
+              <Route path="/travel" element={<TravelPortal />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={
                 <div className="text-center py-20">

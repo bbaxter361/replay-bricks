@@ -407,6 +407,86 @@ app.post('/api/sync/beacon', (req, res) => {
     .catch(err => console.error('Beacon sync failed:', err.message));
 });
 
+// ========== TRAVEL PORTAL API ==========
+
+app.post('/api/travel/search', async (req, res) => {
+  const { type, destination, month, pax, origin, depart, return_date } = req.body;
+  
+  try {
+    // Search via the Python travel search script using browser-harness
+    const { execSync } = await import('child_process');
+    
+    let results = [];
+    
+    if (type === 'cruise') {
+      // Search VacationsToGo for cruises
+      const destName = destination || 'caribbean';
+      const destMap = {
+        caribbean: 'Caribbean', alaska: 'Alaska', bahamas: 'Bahamas',
+        mexico: 'Mexican+Riviera', europe: 'Europe', hawaii: 'Hawaii'
+      };
+      const searchDest = destMap[destName] || destName;
+      
+      try {
+        const output = execSync(
+          `cd ~/workspace/replay-bricks/hold/travel-portal && python3 search.py cruise "${destName}" "${month || '2026-07'}"`,
+          { timeout: 60000, shell: '/bin/bash', encoding: 'utf-8' }
+        );
+        
+        // For now, return the raw search output as a single result
+        // Future: parse actual cruise listings from the scraped data
+        results.push({
+          name: `${destName.charAt(0).toUpperCase() + destName.slice(1)} Cruise - ${month || 'July 2026'}`,
+          price: 'Check sites for pricing',
+          details: `Searching ${destName} cruises. Multiple options available on partner sites.`,
+          source: 'Expedia / VacationsToGo',
+          link: `https://www.vacationstogo.com/cruise_search.cfm?month=${month || '2026-07'}&dest=${destName}`
+        });
+      } catch (e) {
+        results.push({
+          name: `${destName.charAt(0).toUpperCase() + destName.slice(1)} Cruises`,
+          price: 'Check sites',
+          details: `Visit VacationsToGo or Expedia for ${destName} cruise deals in ${month || 'July 2026'}.`,
+          source: 'Multiple sources',
+          link: `https://www.expedia.com/Cruise-Search?destination=${destName}`
+        });
+      }
+    } else if (type === 'colorado') {
+      // Search for Colorado flights
+      const from = origin || 'DFW';
+      const to = destination || 'DEN';
+      
+      try {
+        const output = execSync(
+          `cd ~/workspace/replay-bricks/hold/travel-portal && python3 search.py colorado "${from}" "${depart || '2026-06-10'}" "${return_date || '2026-06-15'}"`,
+          { timeout: 60000, shell: '/bin/bash', encoding: 'utf-8' }
+        );
+        
+        results.push({
+          name: `Flights ${from} → ${to} (${depart || 'Jun 10'} - ${return_date || 'Jun 15'})`,
+          price: 'Check sites for pricing',
+          details: `Searching ${from} to ${to} flights. Compare prices across Expedia and Travelocity.`,
+          source: 'Expedia / Travelocity',
+          link: `https://www.expedia.com/Flights-Search?flight-type=on&d1=${from}&o1=${to}&starDate=${depart || '2026-06-10'}&endDate=${return_date || '2026-06-15'}`
+        });
+      } catch (e) {
+        results.push({
+          name: `Flights ${from} → ${to}`,
+          price: 'Check sites',
+          details: `Visit Expedia or Travelocity to compare ${from} to ${to} flights for your dates.`,
+          source: 'Multiple sources',
+          link: `https://www.travelocity.com/Flights?origin=${from}&destination=${to}`
+        });
+      }
+    }
+    
+    res.json({ results });
+  } catch (err) {
+    console.error('Travel search error:', err);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 // ========== STARTUP ==========
 
 app.listen(PORT, () => {
