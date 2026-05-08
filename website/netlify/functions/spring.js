@@ -45,9 +45,9 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 // Set SPRING_API_KEY as a Netlify env var to enable. Leave empty to disable.
 function apiKeyAuth(req, res, next) {
   if (!SPRING_API_KEY) return next(); // Auth disabled — no key configured
-  const provided = req.headers['x-api-key'];
+  const provided = req.headers['x-api-key'] || req.query.api_key;
   if (!provided || provided !== SPRING_API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized. Provide x-api-key header.' });
+    return res.status(401).json({ error: 'Unauthorized. Provide x-api-key header or ?api_key= query param.' });
   }
   next();
 }

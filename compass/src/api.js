@@ -18,13 +18,27 @@ export const API = {
 
 export { API_BASE };
 
-/**
- * apiFetch - wrapper around fetch that automatically includes the API key header.
- * Usage: apiFetch(url, options) — same as fetch() but x-api-key is always set.
- */
 const API_KEY = 'spring-vicki-2026';
 
 export async function apiFetch(url, options = {}) {
+  const isFormData = options.body instanceof FormData;
+
+  // For FormData (file uploads): the browser MUST auto-set Content-Type
+  // with the multipart boundary. Some browsers strip this when you pass
+  // ANY headers object, so send the API key as a query param too as backup.
+  if (isFormData) {
+    const { 'Content-Type': _, ...safeHeaders } = (options.headers || {});
+    const separator = url.includes('?') ? '&' : '?';
+    return fetch(`${url}${separator}api_key=${API_KEY}`, {
+      ...options,
+      headers: {
+        ...safeHeaders,
+        'x-api-key': API_KEY,
+      },
+    });
+  }
+
+  // For regular (JSON/text) requests, merge headers normally
   const headers = {
     ...(options.headers || {}),
     'x-api-key': API_KEY,
