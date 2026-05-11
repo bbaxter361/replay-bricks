@@ -1,0 +1,30 @@
+[functions]
+  directory = "netlify/functions"
+
+[functions.spring]
+  timeout = 60
+  memory = 2048
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
+  node_bundler = "esbuild"
+  included_files = ["node_modules/pdfjs-dist/build/pdf.worker.mjs", "node_modules/pdfjs-dist/cmaps/**"]
+
+[functions."*"]
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
+  node_bundler = "esbuild"
+  included_files = ["node_modules/pdfjs-dist/build/pdf.worker.mjs"]
+
+[build]
+  base = "/home/bbaxter/workspace/replay-bricks/compass"
+  publish = "website/dist"
+  command = "cd website && npm run build"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/spring"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

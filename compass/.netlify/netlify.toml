@@ -1,16 +1,30 @@
-functionsDirectory = "/home/bbaxter/workspace/replay-bricks/website/netlify/functions"
-functionsDirectoryOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
+functionsDirectory = "/home/bbaxter/workspace/replay-bricks/compass/netlify/functions"
+functionsDirectoryOrigin = "config"
 headers = []
 
+[functions]
+
+[functions."*"]
+external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
+node_bundler = "esbuild"
+included_files = ["node_modules/pdfjs-dist/build/pdf.worker.mjs"]
+
+[functions.spring]
+timeout = 60
+memory = 2048
+external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
+node_bundler = "esbuild"
+included_files = ["node_modules/pdfjs-dist/build/pdf.worker.mjs", "node_modules/pdfjs-dist/cmaps/**"]
+
 [build]
-publish = "/home/bbaxter/workspace/replay-bricks/website/dist"
+publish = "/home/bbaxter/workspace/replay-bricks/compass/website/dist"
 publishOrigin = "config"
 commandOrigin = "config"
-base = "/home/bbaxter/workspace/replay-bricks/website"
-command = "npm run build"
-functions = "/home/bbaxter/workspace/replay-bricks/website/netlify/functions"
+base = "/home/bbaxter/workspace/replay-bricks/compass"
+command = "cd website && npm run build"
+functions = "/home/bbaxter/workspace/replay-bricks/compass/netlify/functions"
 
 [build.environment]
 
@@ -27,12 +41,6 @@ pretty_urls = true
 [build.processing.js]
 
 [build.services]
-
-[functions]
-
-[functions."*"]
-external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
-node_bundler = "esbuild"
 
 [[redirects]]
 from = "/api/*"

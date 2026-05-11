@@ -3,6 +3,7 @@
 
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
 import CalendarPage from './pages/CalendarPage';
 import ContactsPage from './pages/ContactsPage';
@@ -23,7 +24,14 @@ export default function App() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/contacts/:id" element={<ContactDetailPage />} />
-          <Route path="/chat" element={<ChatPage />} />
+          <Route 
+            path="/chat" 
+            element={
+              <ErrorBoundary>
+                <ChatPage />
+              </ErrorBoundary>
+            } 
+          />
           <Route path="/books" element={<BooksPage />} />
         </Routes>
       </main>

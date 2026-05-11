@@ -2,6 +2,7 @@
 // Spring now lives on Netlify as replaybricksv2
 // All requests include the API key for authentication
 
+// Force direct connection to Netlify backend to avoid any proxy issues
 const API_BASE = 'https://replaybricksv2.netlify.app';
 
 export const API = {
@@ -22,6 +23,16 @@ const API_KEY = 'spring-vicki-2026';
 
 export async function apiFetch(url, options = {}) {
   const isFormData = options.body instanceof FormData;
+
+  // Add explicit debugging for file uploads
+  if (url.includes('read-file')) {
+    console.log('🔍 FILE UPLOAD DEBUG:', {
+      url,
+      method: options.method,
+      isFormData,
+      hasFile: isFormData && options.body.has('file')
+    });
+  }
 
   // For FormData (file uploads): the browser MUST auto-set Content-Type
   // with the multipart boundary. Some browsers strip this when you pass
