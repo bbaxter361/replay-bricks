@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { API, API_BASE, apiFetch } from '../api';
+import { buildImageDocText } from '../utils/imageUploadText';
+import { parseSpringActions } from '../utils/springActions';
 
 // Color lookup for event types
 const typeColors = {
@@ -29,6 +31,10 @@ const typeColors = {
 function getTypeColor(type) {
   return typeColors[type] || '#8B9DC4';
 }
+function normalizeEventType(type) {
+  if (type === 'game') return 'games';
+  return typeColors[type] ? type : 'custom';
+}
 
 // Suggested prompts for Amanda
 const suggestedPrompts = [
@@ -41,7 +47,7 @@ const suggestedPrompts = [
 const AI_API_ENDPOINT = API.chat;
 
 export default function ChatPage() {
-  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook } = useStore();
+  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact } = useStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -104,18 +110,15 @@ export default function ChatPage() {
     setFilePreviewName(null);
   };
 
-  // Convert File to base64 for sending to API
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        // Strip the data:image/...;base64, prefix
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  const extractImageText = async (file) => {
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker('eng');
+    try {
+      const { data } = await worker.recognize(file);
+      return data.text || '';
+    } finally {
+      await worker.terminate();
+    }
   };
 
   // Send message handler — calls DeepSeek via backend proxy
@@ -165,6 +168,17 @@ export default function ChatPage() {
         removeFile();
       }
 
+      // Images are OCR'd in-browser and sent as text because DeepSeek's
+      // production chat API accepts text messages, not image_url parts.
+      if (selectedImage) {
+        setFileUploading(true);
+        const ocrText = await extractImageText(selectedImage);
+        docText = buildImageDocText(selectedImage.name, ocrText);
+        fileName = selectedImage.name;
+        setFileUploading(false);
+        removeFile();
+      }
+
       // Send to backend API
       const body = {
         message: userMessageText,
@@ -180,13 +194,6 @@ export default function ChatPage() {
         body.fileName = fileName;
       }
 
-      // Add image if selected
-      if (selectedImage) {
-        const base64Image = await fileToBase64(selectedImage);
-        body.image = base64Image;
-        removeFile();
-      }
-
       const res = await apiFetch(AI_API_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,9 +201,6 @@ export default function ChatPage() {
       });
 
       let responseText = '';
-      let parsedEvent = null;
-      let parsedBook = null;
-      let parsedContact = null;
 
       if (res.ok) {
         const data = await res.json();
@@ -205,66 +209,34 @@ export default function ChatPage() {
         throw new Error('API not available');
       }
 
-      // Check for embedded calendar events
-      const eventMatch = responseText.match(/===EVENT===\n?([\s\S]*?)\n?===END===/);
-      if (eventMatch) {
-        try {
-          parsedEvent = JSON.parse(eventMatch[1]);
-        } catch (e) {
-          console.warn('Failed to parse event block:', e);
-        }
-        // Remove the event block from the display message
-        responseText = responseText.replace(/===EVENT===\n?[\s\S]*?\n?===END===/, '').trim();
-      }
-
-      // Check for embedded book additions
-      const bookMatch = responseText.match(/===BOOK===\n?([\s\S]*?)\n?===END===/);
-      if (bookMatch) {
-        try {
-          parsedBook = JSON.parse(bookMatch[1]);
-        } catch (e) {
-          console.warn('Failed to parse book block:', e);
-        }
-        // Remove the book block from the display message
-        responseText = responseText.replace(/===BOOK===\n?[\s\S]*?\n?===END===/, '').trim();
-      }
-
-      // Check for embedded contact additions
-      const contactMatch = responseText.match(/===CONTACT===\n?([\s\S]*?)\n?===END===/);
-      if (contactMatch) {
-        try {
-          parsedContact = JSON.parse(contactMatch[1]);
-        } catch (e) {
-          console.warn('Failed to parse contact block:', e);
-        }
-        responseText = responseText.replace(/===CONTACT===\n?[\s\S]*?\n?===END===/, '').trim();
-      }
+      const parsedActions = parseSpringActions(responseText);
+      responseText = parsedActions.displayText || "Done. I handled that for you.";
 
       addChatMessage({ role: 'assistant', message: responseText });
 
-      // If Spring created a calendar event, add it
-      if (parsedEvent) {
+      // If Spring created calendar events, add them
+      parsedActions.events.forEach((parsedEvent) => {
+        const eventType = normalizeEventType(parsedEvent.type);
         const eventToAdd = {
           title: parsedEvent.title || 'Activity',
           start: new Date(parsedEvent.start).toISOString(),
           end: new Date(parsedEvent.end).toISOString(),
-          type: parsedEvent.type || 'custom',
+          type: eventType,
           description: parsedEvent.description || '',
           wing: parsedEvent.wing || 'both',
           residents: parsedEvent.residents || [],
-          color: getTypeColor(parsedEvent.type),
+          color: getTypeColor(eventType),
         };
         addEvent(eventToAdd);
-        // Add a system message confirming the event was added
         const wingLabel = eventToAdd.wing === 'memory' ? 'Memory Care' : eventToAdd.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
         addChatMessage({
           role: 'assistant',
           message: `✅ **Added to calendar!** "${eventToAdd.title}" has been scheduled for ${new Date(parsedEvent.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(parsedEvent.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} on the **${wingLabel}** calendar. Check your calendar to see it! 📅`
         });
-      }
+      });
 
-      // If Spring added a book, add it
-      if (parsedBook) {
+      // If Spring added books, add them
+      parsedActions.books.forEach((parsedBook) => {
         addBook({
           title: parsedBook.title || 'Untitled',
           author: parsedBook.author || 'Unknown',
@@ -277,10 +249,10 @@ export default function ChatPage() {
           role: 'assistant',
           message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}. Check your Books page to see your reading stats! 📚`
         });
-      }
+      });
 
-      // If Spring extracted a contact, add it
-      if (parsedContact && parsedContact.name) {
+      // If Spring extracted contacts, add them
+      parsedActions.contacts.filter(contact => contact && contact.name).forEach((parsedContact) => {
         addContact({
           name: parsedContact.name,
           phone: parsedContact.phone || '',
@@ -295,7 +267,7 @@ export default function ChatPage() {
           role: 'assistant',
           message: `✅ **Saved contact!** "${parsedContact.name}"${parsedContact.company ? ` from ${parsedContact.company}` : ''} has been added to your Contacts. Check your Contacts page! 📇`
         });
-      }
+      });
     } catch (err) {
       addChatMessage({
         role: 'assistant',

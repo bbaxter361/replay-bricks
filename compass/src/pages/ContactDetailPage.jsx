@@ -151,14 +151,18 @@ export default function ContactDetailPage() {
     setScanning(true);
     setOcrResult(null);
     try {
-      // Send to Spring via the chat endpoint with the image
-      const base64 = imageData.split(',')[1];
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('eng');
+      const { data: ocrData } = await worker.recognize(imageData);
+      await worker.terminate();
+
       const res = await apiFetch(API.chat, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: "I've uploaded a business card. Please extract the person's name, phone number, email, company name, and job title from it. Return ONLY a JSON object with fields: name, phone, email, company, title. No other text.",
-          image: base64,
+          message: "I've uploaded a business card or driver's license. Please extract the person's name, phone number, email, company name, and job title if present. Return ONLY a JSON object with fields: name, phone, email, company, title. No other text.",
+          docText: ocrData.text || '',
+          fileName: file?.name || 'contact image',
           history: []
         })
       });

@@ -50,7 +50,8 @@ export default function PortalPage({ user, onLogout }) {
               <circle cx="40" cy="40" r="6" fill="#4A90A2" opacity="0.6"/>
             </svg>
           ),
-          route: '/compass',
+          route: 'https://compass-replaybricks-v2-550.netlify.app?auto=true',
+          external: true,
           color: '#4A90A2',
         },
         {
@@ -208,7 +209,13 @@ export default function PortalPage({ user, onLogout }) {
                       transition={{ delay: 0.08 * sIdx + 0.1 * aIdx, duration: 0.5 }}
                     >
                       <button
-                        onClick={() => navigate(app.route)}
+                        onClick={() => {
+                          if (app.external) {
+                            window.location.href = app.route;
+                            return;
+                          }
+                          navigate(app.route);
+                        }}
                         className="w-full h-full text-left group relative bg-[#1a1a2e] border border-white/10 hover:border-white/20 rounded-2xl p-6 md:p-7 transition-all duration-500 hover:scale-[1.02] hover:shadow-xl cursor-pointer"
                       >
                         <div

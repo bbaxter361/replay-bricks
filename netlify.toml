@@ -12,7 +12,7 @@
 # Netlify Functions
 [functions]
   node_bundler = "esbuild"
-  directory = "netlify/functions"
+  directory = "website/netlify/functions"
   external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
 
 # API — route all /api/* through Spring function

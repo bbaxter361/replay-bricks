@@ -1,7 +1,14 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+
+const COMPASS_URL = 'https://compass-replaybricks-v2-550.netlify.app?auto=true';
 
 export default function CompassPage({ user, onLogout }) {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    window.location.replace(COMPASS_URL);
+  }, []);
 
   const handleLogout = () => {
     onLogout();
@@ -48,11 +55,17 @@ export default function CompassPage({ user, onLogout }) {
 
       {/* App iframe */}
       <div className="flex-1 relative">
-        <iframe
-          src="https://compass-replaybricks.netlify.app?auto=true"
-          className="absolute inset-0 w-full h-full border-0"
-          title="Compass Memory Care"
-        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="max-w-md text-sm text-gray-400">
+            Compass opens in its own app now so Spring, uploads, and navigation stay on the correct URL.
+          </p>
+          <a
+            href={COMPASS_URL}
+            className="rounded-lg bg-[#4A90A2] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3b7d8d] transition-colors"
+          >
+            Open Compass
+          </a>
+        </div>
       </div>
     </div>
   );
