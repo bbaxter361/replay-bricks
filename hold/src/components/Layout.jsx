@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { 
   LayoutDashboard, Package, ShoppingCart, DollarSign, 
   Puzzle, BarChart3, Store, Settings, LogOut, Menu, X, 
-  Box, Airplay
+  Box, Airplay, ClipboardList 
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useState } from 'react'
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/reports', icon: BarChart3, label: 'Reports' },
   { to: '/marketplaces', icon: Store, label: 'Marketplaces' },
   { to: '/travel', icon: Airplay, label: 'Travel Portal' },
+  { to: '/pending', icon: ClipboardList, label: 'Pending Review' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

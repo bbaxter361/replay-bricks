@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Grid3X3, List, RefreshCw, Package, ExternalLink, X, ZoomIn } from 'lucide-react'
+import { Search, Plus, Grid3X3, List, RefreshCw, Package, ExternalLink, X, ZoomIn, TrendingUp, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '../api'
 
@@ -34,7 +34,9 @@ export default function Inventory() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [view, setView] = useState('table')
-  const [imageModal, setImageModal] = useState(null) // item to show in modal
+  const [imageModal, setImageModal] = useState(null)
+  const [prices, setPrices] = useState({})      // { [itemId]: { avg, min, max, loading } }
+  const [refreshingAll, setRefreshingAll] = useState(false)
 
   const loadItems = async () => {
     setLoading(true)
@@ -45,11 +47,48 @@ export default function Inventory() {
       setItems(data.items)
       setTotalPages(data.pages)
       setTotal(data.total)
+      // Load prices for visible items
+      loadPrices(data.items)
     } catch (err) {
       console.error('Failed to load inventory:', err)
       toast.error('Failed to load inventory')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadPrices = async (itemsList) => {
+    if (!itemsList || itemsList.length === 0) return
+    const ids = itemsList.map(i => i.id)
+    for (const id of ids) {
+      setPrices(prev => ({ ...prev, [id]: { ...prev[id], loading: true } }))
+      try {
+        const data = await api.getItemPrices(id)
+        setPrices(prev => ({
+          ...prev,
+          [id]: {
+            loading: false,
+            prices: data.prices || [],
+            source: data.source,
+          }
+        }))
+      } catch {
+        setPrices(prev => ({ ...prev, [id]: { loading: false, prices: [], source: 'error' } }))
+      }
+    }
+  }
+
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true)
+    try {
+      const result = await api.refreshAllPrices()
+      toast.success(`Refreshed ${result.success}/${result.total} prices`)
+      // Reload prices for current page
+      await loadPrices(items)
+    } catch (err) {
+      toast.error('Price refresh failed: ' + err.message)
+    } finally {
+      setRefreshingAll(false)
     }
   }
 
@@ -86,6 +125,9 @@ export default function Inventory() {
         <div className="flex gap-2">
           <button onClick={loadItems} className="flex items-center gap-1.5 bg-dark-surface hover:bg-dark-border text-gray-300 px-3 py-2 rounded-lg text-sm border border-dark-border transition-colors">
             <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
+          <button onClick={handleRefreshAll} disabled={refreshingAll} className="flex items-center gap-1.5 bg-dark-surface hover:bg-dark-border text-gray-300 px-3 py-2 rounded-lg text-sm border border-dark-border transition-colors disabled:opacity-50">
+            <TrendingUp className={`w-4 h-4 ${refreshingAll ? 'animate-spin' : ''}`} /> {refreshingAll ? 'Pricing...' : 'Refresh Prices'}
           </button>
         </div>
       </div>
@@ -130,6 +172,7 @@ export default function Inventory() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Color</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Qty</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Price</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">BL Avg</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Location</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Condition</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Mktpl</th>
@@ -171,6 +214,22 @@ export default function Inventory() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-green-400 font-medium">${(item.unit_price_cents / 100).toFixed(2)}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const p = prices[item.id]
+                          if (!p || p.loading) return <span className="text-xs text-gray-600">...</span>
+                          const avg = p.prices?.find(pr => pr.source === 'bricklink')?.avg_price_cents
+                          if (!avg) return <span className="text-xs text-gray-600">—</span>
+                          const diff = item.unit_price_cents - avg
+                          const color = diff < -10 ? 'text-green-400' : diff > 10 ? 'text-red-400' : 'text-yellow-400'
+                          const icon = diff < -10 ? '↓' : diff > 10 ? '↑' : '→'
+                          return (
+                            <span className={`text-sm font-mono ${color}`} title={`BL avg: $${(avg / 100).toFixed(2)}`}>
+                              {icon} ${(avg / 100).toFixed(2)}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-400">{item.location || '—'}</td>
                       <td className="px-4 py-3">
@@ -236,6 +295,18 @@ export default function Inventory() {
                 <span className={`text-sm font-bold ${item.quantity <= 3 ? 'text-red-400' : 'text-white'}`}>{item.quantity}</span>
                 <span className="text-sm text-green-400">${(item.unit_price_cents / 100).toFixed(2)}</span>
               </div>
+              {(() => {
+                const p = prices[item.id]
+                const avg = p?.prices?.find(pr => pr.source === 'bricklink')?.avg_price_cents
+                if (!avg) return null
+                const diff = item.unit_price_cents - avg
+                const color = diff < -10 ? 'text-green-400' : diff > 10 ? 'text-red-400' : 'text-yellow-400'
+                return (
+                  <p className={`text-xs ${color} mt-1 font-mono`} title={`BL avg: $${(avg / 100).toFixed(2)}`}>
+                    BL: ${(avg / 100).toFixed(2)}
+                  </p>
+                )
+              })()}
             </a>
           ))}
         </div>
@@ -302,6 +373,18 @@ export default function Inventory() {
                 </span>
                 {imageModal.location && <span className="text-gray-500">📍 {imageModal.location}</span>}
               </div>
+              {(() => {
+                const p = prices[imageModal?.id]
+                const avg = p?.prices?.find(pr => pr.source === 'bricklink')?.avg_price_cents
+                if (!avg) return null
+                const diff = imageModal.unit_price_cents - avg
+                const color = diff < -10 ? 'text-green-400' : diff > 10 ? 'text-red-400' : 'text-yellow-400'
+                return (
+                  <p className={`text-xs ${color} font-mono mt-1`}>
+                    BrickLink avg: ${(avg / 100).toFixed(2)} · {diff < -10 ? 'Below market' : diff > 10 ? 'Above market' : 'At market'}
+                  </p>
+                )
+              })()}
             </div>
           </div>
         </div>

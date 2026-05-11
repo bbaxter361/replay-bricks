@@ -520,6 +520,80 @@ async function getBlobStore() {
   }
 }
 
+// ── URL Extraction Helpers ──
+
+/**
+ * Extract URLs from a text string. Matches http/https URLs.
+ */
+function extractUrls(text) {
+  if (!text) return [];
+  const urlPattern = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+  const matches = text.match(urlPattern) || [];
+  // Deduplicate and filter out markdown/image shortcodes
+  return [...new Set(matches)].filter(url => {
+    try { new URL(url); return true; } catch { return false; }
+  });
+}
+
+/**
+ * Fetch a URL and extract readable text content.
+ * Strips HTML tags, returns plain text. Timeout 8s, max 50KB.
+ */
+async function fetchUrlContent(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Spring-Compass/2.0 (Activities Assistant)',
+        'Accept': 'text/html,text/plain,*/*'
+      }
+    });
+    clearTimeout(timeout);
+    
+    if (!response.ok) return `[Could not fetch ${url}: HTTP ${response.status}]`;
+    
+    const contentType = response.headers.get('content-type') || '';
+    const raw = await response.text();
+    
+    let text;
+    if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
+      // Strip HTML tags, decode entities
+      text = raw
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+    } else if (contentType.includes('application/pdf')) {
+      text = '[PDF document — Amanda, try downloading and uploading the file instead]';
+    } else {
+      text = raw.substring(0, 50000);
+    }
+    
+    if (!text || text.length < 20) return `[No readable content found at ${url}]`;
+    
+    const maxLen = 30000;
+    if (text.length > maxLen) {
+      text = text.substring(0, maxLen) + `\n\n[...truncated from ${text.length} characters]`;
+    }
+    
+    console.log(`🌐 Fetched URL: ${url} — extracted ${text.length} chars`);
+    return text;
+  } catch (err) {
+    console.warn(`⚠️ Failed to fetch URL ${url}:`, err.message);
+    return `[Failed to fetch ${url}: ${err.message}]`;
+  }
+}
+
 // ── Chat endpoint ──
 app.post('/api/chat', apiKeyAuth, async (req, res) => {
   try {
@@ -534,12 +608,25 @@ app.post('/api/chat', apiKeyAuth, async (req, res) => {
       });
     }
 
+    // Extract URLs from message and fetch content for Spring context
+    let webContext = '';
+    if (message && !docText) {
+      const urls = extractUrls(message);
+      if (urls.length > 0) {
+        console.log(`🔗 Found ${urls.length} URL(s) in message:`, urls);
+        const contents = await Promise.all(urls.map(fetchUrlContent));
+        webContext = urls.map((url, i) => {
+          return `\n\n[Web Link: ${url}]\n\`\`\`\n${contents[i]}\n\`\`\``;
+        }).join('\n');
+      }
+    }
+
     // Build the user message
     let fullMessage = '';
     if (docText && fileName) {
       fullMessage = `[File: ${fileName}]\n\nContents of the uploaded file:\n\`\`\`\n${docText.substring(0, 50000)}\n\`\`\`\n\n${message || 'Please review this document and help me with it.'}`;
     } else if (message) {
-      fullMessage = message;
+      fullMessage = message + webContext;
     }
 
     const urlContext = await fetchUrlContext(message);

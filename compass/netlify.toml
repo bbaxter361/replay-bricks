@@ -14,7 +14,7 @@
   included_files = ["node_modules/pdfjs-dist/build/pdf.worker.mjs"]
 
 [build]
-  base = "/home/bbaxter/workspace/replay-bricks/compass"
+  base = "."
   publish = "website/dist"
   command = "cd website && npm run build"
   functions = "netlify/functions"

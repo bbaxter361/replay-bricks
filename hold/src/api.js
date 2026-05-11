@@ -87,4 +87,34 @@ export const api = {
   // Marketplace Lots
   getMarketplaceLots: (marketplace) =>
     request(`/marketplace-lots/${marketplace}`),
+
+  // Price Guide
+  getItemPrices: (id) => request(`/inventory/${id}/prices`),
+  refreshAllPrices: () =>
+    request('/inventory/refresh-prices', { method: 'POST' }),
+
+  // Pending Items (Voice Import)
+  getPendingItems: () => request('/pending'),
+  addPendingItem: (item) =>
+    request('/pending', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    }),
+  addPendingBatch: (items, session_id) =>
+    request('/pending/batch', {
+      method: 'POST',
+      body: JSON.stringify({ items, session_id }),
+    }),
+  updatePendingItem: (id, data) =>
+    request(`/pending/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deletePendingItem: (id) =>
+    request(`/pending/${id}`, { method: 'DELETE' }),
+  confirmPendingItems: (ids) =>
+    request('/pending/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
 };

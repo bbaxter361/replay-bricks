@@ -153,6 +153,42 @@ function initSchema(db) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Price cache for BrickLink + BrickEconomy market data
+    CREATE TABLE IF NOT EXISTS price_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      part_no TEXT NOT NULL,
+      color_id INTEGER,
+      source TEXT NOT NULL,  -- 'bricklink', 'brickeconomy'
+      avg_price_cents INTEGER,
+      min_price_cents INTEGER,
+      max_price_cents INTEGER,
+      qty_available INTEGER,
+      currency TEXT DEFAULT 'USD',
+      condition TEXT DEFAULT 'USED',
+      raw_data TEXT,  -- JSON blob for extra fields
+      cached_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(part_no, color_id, source, condition)
+    );
+
+    -- Pending inventory items (voice-added, pending review)
+    CREATE TABLE IF NOT EXISTS pending_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      part_no TEXT NOT NULL,
+      color_id INTEGER,
+      color_name TEXT,
+      part_name TEXT,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      condition TEXT DEFAULT 'USED',
+      location TEXT,
+      unit_price_cents INTEGER,
+      notes TEXT,
+      source TEXT DEFAULT 'voice',
+      session_id TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     -- Sync state for marketplace inventory (pagination cursors, etc.)
     CREATE TABLE IF NOT EXISTS sync_state (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -11,6 +11,7 @@ import Reports from './pages/Reports'
 import Marketplaces from './pages/Marketplaces'
 import TravelPortal from './pages/TravelPortal'
 import Settings from './pages/Settings'
+import PendingReview from './pages/PendingReview'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/marketplaces" element={<Marketplaces />} />
               <Route path="/travel" element={<TravelPortal />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/pending" element={<PendingReview />} />
               <Route path="*" element={
                 <div className="text-center py-20">
                   <h2 className="text-2xl font-bold text-white mb-2">404</h2>
