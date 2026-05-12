@@ -285,7 +285,8 @@ export default function ChatPage() {
         removeFile();
       }
 
-      // Send to backend API      const body = {
+      // Send to backend API
+      const body = {
         message: userMessageText,
         history: chatHistoryRef.current.slice(-20).map(m => ({
           role: m.role,
@@ -310,11 +311,9 @@ export default function ChatPage() {
         body: JSON.stringify(body)
       });
 
-      let responseText = '';
-        const data = await res.json();
+      let responseText = data.response || '';
         console.log('📋 [DEBUG] Raw API response data:', data);
         
-        let responseText = data.response || '';
         console.log('📋 [DEBUG] Extracted response text:', responseText);
         console.log('📋 [DEBUG] Response text length:', responseText.length);
         console.log('📋 [DEBUG] Response text trimmed length:', responseText.trim().length);
@@ -334,7 +333,8 @@ export default function ChatPage() {
 
       // If Spring created calendar events, add them
       parsedActions.events.forEach((parsedEvent) => {
-        const eventType = normalizeEventType(parsedEvent.type);        const eventToAdd = {
+        const eventType = normalizeEventType(parsedEvent.type);
+        const eventToAdd = {
           title: parsedEvent.title || 'Activity',
           start: new Date(parsedEvent.start).toISOString(),
           end: new Date(parsedEvent.end).toISOString(),
@@ -346,7 +346,8 @@ export default function ChatPage() {
         };
         
         addEvent(eventToAdd);
-        const wingLabel = eventToAdd.wing === 'memory' ? 'Memory Care' : eventToAdd.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';        addChatMessage({
+        const wingLabel = eventToAdd.wing === 'memory' ? 'Memory Care' : eventToAdd.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
+        addChatMessage({
           role: 'assistant',
           message: `✅ **Added to calendar!** "${eventToAdd.title}" has been scheduled for ${new Date(parsedEvent.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(parsedEvent.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} on the **${wingLabel}** calendar. Check your calendar to see it! 📅`
         });
@@ -354,7 +355,8 @@ export default function ChatPage() {
 
       // If Spring added books, add them
       parsedActions.books.forEach((parsedBook) => {
-        addBook({          title: parsedBook.title || 'Untitled',
+        const bookToAdd = {
+          title: parsedBook.title || 'Untitled',
           author: parsedBook.author || 'Unknown',
           pages: parsedBook.pages || 0,
           dateRead: new Date().toISOString(),
@@ -371,7 +373,8 @@ export default function ChatPage() {
 
       // If Spring extracted contacts, add them
       parsedActions.contacts.filter(contact => contact && contact.name).forEach((parsedContact) => {
-        addContact({          name: parsedContact.name,
+        const contactToAdd = {
+          name: parsedContact.name,
           phone: parsedContact.phone || '',
           email: parsedContact.email || '',
           relationship: parsedContact.relationship || 'other',

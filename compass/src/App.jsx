@@ -1,6 +1,7 @@
 // Compass App - Memory Care Activities Manager
 // Main application with routing and layout
 
+import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -10,8 +11,16 @@ import ContactsPage from './pages/ContactsPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import ChatPage from './pages/ChatPage';
 import BooksPage from './pages/BooksPage';
+import { useStore } from './stores/useStore';
 
 export default function App() {
+  const restoreFromBlobs = useStore((s) => s.restoreFromBlobs);
+
+  useEffect(() => {
+    // On mount, try to restore data from Netlify Blobs
+    // This ensures data survives browser cache clears
+    restoreFromBlobs();
+  }, [restoreFromBlobs]);
   return (
     <div className="flex min-h-screen bg-dark-bg">
       {/* Sidebar */}

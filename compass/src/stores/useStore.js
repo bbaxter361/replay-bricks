@@ -1,10 +1,13 @@
 // Application data store using Zustand
-// Persists data to localStorage for MVP
+// Persists data to localStorage (fast) AND syncs to Netlify Blobs (durable)
+// Blob sync ensures data survives browser cache clears and device switches
 
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { apiFetch, API } from '../api';
 
 const STORAGE_KEY = 'compass-app-data';
+const BLOB_KEYS = ['contacts', 'events', 'chatHistory', 'conversations', 'books'];
 
 // Load data from localStorage or return empty state
 function loadData() {
@@ -167,6 +170,72 @@ function saveData(state) {
   }
 }
 
+// ── Netlify Blob Sync ──
+// Syncing to blobs ensures data survives browser cache clears.
+// Local storage is fast + local; blobs are durable + cross-device.
+
+let _blobSyncPending = false;
+
+/** Send one slice of data to the blob store */
+async function syncSliceToBlobs(key, data) {
+  try {
+    const response = await apiFetch(API.dataSave, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value: data }),
+    });
+    if (!response.ok) throw new Error(`Blob save ${key}: ${response.status}`);
+    return true;
+  } catch (e) {
+    console.warn(`⚠️ Blob sync failed for "${key}":`, e.message);
+    return false;
+  }
+}
+
+/** Fire-and-forget sync for all data slices */
+function syncToBlobs(state) {
+  if (_blobSyncPending) return; // skip if a sync is still in-flight
+  _blobSyncPending = true;
+  Promise.all(
+    BLOB_KEYS.map((key) => {
+      const data = state[key];
+      if (!data || !Array.isArray(data)) return Promise.resolve(false);
+      return syncSliceToBlobs(key, data);
+    })
+  ).then(() => {
+    _blobSyncPending = false;
+  }).catch(() => {
+    _blobSyncPending = false;
+  });
+}
+
+/** Load ALL data from blob store, returns object or null */
+async function tryLoadFromBlobs() {
+  try {
+    const result = {};
+    const responses = await Promise.allSettled(
+      BLOB_KEYS.map(async (key) => {
+        const res = await apiFetch(API.dataGet(key));
+        if (!res.ok) throw new Error(`Blob fetch ${key}: ${res.status}`);
+        const json = await res.json();
+        return { key, data: json.data };
+      })
+    );
+
+    let hasAnyData = false;
+    for (const r of responses) {
+      if (r.status === 'fulfilled' && r.value && Array.isArray(r.value.data) && r.value.data.length > 0) {
+        result[r.value.key] = r.value.data;
+        hasAnyData = true;
+      }
+    }
+    return hasAnyData ? result : null;
+  } catch (e) {
+    console.warn('⚠️ Failed to load from blobs:', e.message);
+    return null;
+  }
+}
+
 const initialData = loadData();
 
 // Helper: get start of week (Sunday) for a given date
@@ -201,6 +270,30 @@ export const useStore = create((set, get) => ({
   conversations: initialData.conversations,
   books: initialData.books,
   activeConversationId: null,
+  _restoredFromServer: false,
+
+  // ── Blob restore: try to load fresher data from server ──
+  restoreFromBlobs: async () => {
+    const state = get();
+    if (state._restoredFromServer) return;
+    const blobData = await tryLoadFromBlobs();
+    if (!blobData) return;
+    set((current) => {
+      const merged = { ...current, _restoredFromServer: true };
+      for (const key of BLOB_KEYS) {
+        if (blobData[key] && blobData[key].length > 0) {
+          // Only overwrite if blob has more data than what we have locally
+          const currentArr = current[key] || [];
+          if (blobData[key].length > currentArr.length) {
+            merged[key] = blobData[key];
+          }
+        }
+      }
+      // Re-save to localStorage so local cache is current
+      saveData(merged);
+      return merged;
+    });
+  },
 
   // --- Contact Actions ---
   addContact: (contact) => {
@@ -215,6 +308,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, contacts });
       return { contacts };
     });
+    syncToBlobs({ ...get(), contacts: [...get().contacts, newContact] });
     return newContact;
   },
 
@@ -226,6 +320,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, contacts });
       return { contacts };
     });
+    syncToBlobs(get());
   },
 
   deleteContact: (id) => {
@@ -234,6 +329,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, contacts });
       return { contacts };
     });
+    syncToBlobs(get());
   },
 
   getContact: (id) => {
@@ -254,6 +350,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, events });
       return { events };
     });
+    syncToBlobs({ ...get(), events: [...get().events, newEvent] });
     return newEvent;
   },
 
@@ -265,6 +362,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, events });
       return { events };
     });
+    syncToBlobs(get());
   },
 
   deleteEvent: (id) => {
@@ -273,6 +371,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, events });
       return { events };
     });
+    syncToBlobs(get());
   },
 
   // --- Chat Actions ---
@@ -313,6 +412,7 @@ export const useStore = create((set, get) => ({
       });
       
       console.log('🏪 [DEBUG STORE] Returning new message:', newMsg);
+      syncToBlobs(get());
       return newMsg;
     } catch (error) {
       console.error('🏪 [DEBUG STORE] Failed to add chat message:', error);
@@ -333,6 +433,7 @@ export const useStore = create((set, get) => ({
         saveData(newState);
         return { chatHistory: [] };
       });
+      syncToBlobs(get());
     } catch (error) {
       console.error('Failed to clear chat history:', error);
     }
@@ -352,6 +453,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, conversations });
       return { conversations, activeConversationId: conv.id };
     });
+    syncToBlobs(get());
     return conv;
   },
 
@@ -371,6 +473,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, books });
       return { books };
     });
+    syncToBlobs({ ...get(), books: [...get().books, newBook] });
     return newBook;
   },
 
@@ -380,6 +483,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, books });
       return { books };
     });
+    syncToBlobs(get());
   },
 
   getBooksTally: () => {
@@ -424,5 +528,6 @@ export const useStore = create((set, get) => ({
       activeConversationId: null
     });
     saveData(data);
+    syncToBlobs(data);
   }
 }));
