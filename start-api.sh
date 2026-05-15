@@ -19,8 +19,12 @@ pkill -f "node server.js" 2>/dev/null || true
 pkill -f cloudflared 2>/dev/null || true
 sleep 1
 
-# API key from .env or fallback
-DEEPSEEK_API_KEY="sk-927c40f732ae4322ac74d5950459bc43"
+# API key must come from the local environment.
+DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}"
+if [ -z "$DEEPSEEK_API_KEY" ]; then
+  echo "❌ DEEPSEEK_API_KEY is not set. Export it before running this script."
+  exit 1
+fi
 
 # Start API server
 echo "🚀 Starting API server..."
