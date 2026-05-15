@@ -1,6 +1,6 @@
 # Main Replay Bricks website and Spring API
 [build]
-  command = "cd website && npm run build"
+  command = "cd website && npm ci --include=dev && npm run build"
   publish = "website/dist"
 
 [build.processing]
