@@ -50,7 +50,7 @@ export default function PortalPage({ user, onLogout }) {
               <circle cx="40" cy="40" r="6" fill="#4A90A2" opacity="0.6"/>
             </svg>
           ),
-          route: 'https://compass-replaybricks-v2-550.netlify.app?auto=true',
+          route: 'https://compass-replaybricks-v2-550.netlify.app/chat?auto=true',
           external: true,
           color: '#4A90A2',
         },
