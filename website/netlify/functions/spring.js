@@ -109,7 +109,7 @@ async function callAI(systemPrompt, userMessage, imageBase64, history) {
   return data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that request.";
 }
 
-function extractUrls(text) {
+function extractUrlsForChat(text) {
   return [...new Set(String(text || '').match(urlRegex) || [])].slice(0, 3);
 }
 
@@ -611,7 +611,7 @@ app.post('/api/chat', apiKeyAuth, async (req, res) => {
     // Extract URLs from message and fetch content for Spring context
     let webContext = '';
     if (message && !docText) {
-      const urls = extractUrls(message);
+      const urls = extractUrlsForChat(message);
       if (urls.length > 0) {
         console.log(`🔗 Found ${urls.length} URL(s) in message:`, urls);
         const contents = await Promise.all(urls.map(fetchUrlContent));
