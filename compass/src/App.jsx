@@ -12,6 +12,7 @@ import ContactsPage from './pages/ContactsPage';
 import ContactDetailPage from './pages/ContactDetailPage';
 import ChatPage from './pages/ChatPage';
 import BooksPage from './pages/BooksPage';
+import ExportDashboard from './pages/ExportDashboard';
 import { useStore } from './stores/useStore';
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
             } 
           />
           <Route path="/books" element={<BooksPage />} />
+          <Route path="/export" element={<ExportDashboard />} />
         </Routes>
       </main>
     </div>

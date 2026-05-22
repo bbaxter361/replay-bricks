@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Compass,
+  FileDown,
   ArrowLeft
 } from 'lucide-react';
 
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/books', label: 'Books', icon: BookOpen },
   { path: '/chat', label: 'AI Chat', icon: MessageCircle },
+  { path: '/export', label: 'Export', icon: FileDown },
 ];
 
 export default function Sidebar() {

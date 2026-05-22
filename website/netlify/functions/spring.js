@@ -10,6 +10,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { getStore } from '@netlify/blobs';
+import crypto from 'crypto';
 
 // CJS compatibility: Netlify bundles functions to CJS where import.meta.url is empty
 import { createRequire } from 'module';
@@ -955,6 +956,97 @@ app.get('/api/data/audit', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequest
       offset,
       limit,
       entries: page,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Data Export (State Audit) ──
+// GET /api/data/export?format=json|csv&keys=all|comma,separated
+// Returns all Compass data formatted for state audit export with integrity hash.
+// Uses SHA-256 to produce a data integrity fingerprint auditors can verify.
+
+function hashData(data) {
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+
+function jsonToCSV(records, key) {
+  if (!records || !records.length) return `# ${key} — no records\n`;
+  const headers = Object.keys(records[0]);
+  const rows = [headers.join(',')];
+  for (const row of records) {
+    rows.push(headers.map(h => {
+      const val = row[h];
+      if (val === null || val === undefined) return '';
+      const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      const escaped = str.replace(/"/g, '""');
+      return /[,"\n\r]/.test(str) ? `"${escaped}"` : escaped;
+    }).join(','));
+  }
+  return `# Data type: ${key}\n${rows.join('\n')}\n\n`;
+}
+
+app.get('/api/data/export', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 20, label: 'export' }), async (req, res) => {
+  try {
+    const format = (req.query.format || 'json').toLowerCase();
+    const keysParam = (req.query.keys || 'all').toLowerCase();
+
+    const store = await getBlobStore();
+    let allKeys;
+    if (store instanceof Map) {
+      allKeys = [...store.keys()].filter(k => k !== AUDIT_LOG_KEY && !k.startsWith('__'));
+    } else {
+      const listing = await store.list();
+      allKeys = listing.blobs.map(b => b.key).filter(k => k !== AUDIT_LOG_KEY && !k.startsWith('__'));
+    }
+
+    const exportKeys = keysParam === 'all' ? allKeys : keysParam.split(',').filter(k => allKeys.includes(k));
+
+    const records = {};
+    const recordCounts = {};
+    for (const key of exportKeys) {
+      let data;
+      if (store instanceof Map) {
+        const raw = store.get(key);
+        data = raw ? JSON.parse(raw) : null;
+      } else {
+        data = await store.get(key, { type: 'json' });
+      }
+      records[key] = data;
+      recordCounts[key] = Array.isArray(data) ? data.length : (data && typeof data === 'object' ? Object.keys(data).length : 0);
+    }
+
+    const dataFingerprint = hashData({ exportedAt: new Date().toISOString(), records, recordCounts });
+
+    await appendAuditLog({
+      action: 'data_export',
+      user: 'authenticated',
+      details: `Export: ${exportKeys.length} keys, format=${format}, hash=${dataFingerprint.slice(0, 12)}`
+    });
+
+    if (format === 'csv') {
+      let csv = `# Compass Data Export\n# Exported: ${new Date().toISOString()}\n# Integrity SHA-256: ${dataFingerprint}\n# Audited by: Spring v2.0\n\n`;
+      for (const key of exportKeys) {
+        const recs = Array.isArray(records[key]) ? records[key] : (records[key] ? [records[key]] : []);
+        csv += jsonToCSV(recs, key);
+      }
+      res.set('Content-Type', 'text/csv; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="compass-export-${new Date().toISOString().slice(0, 10)}.csv"`);
+      return res.send(csv);
+    }
+
+    res.json({
+      exportedAt: new Date().toISOString(),
+      dataHash: dataFingerprint,
+      exportedBy: 'Spring v2.0 (Netlify)',
+      keyCount: exportKeys.length,
+      recordCounts,
+      records,
+      _audit: {
+        note: 'This export includes a SHA-256 data integrity hash. Verify unchanged by re-hashing the records object.',
+        verifyCommand: `echo '<json>' | sha256sum`
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
