@@ -333,16 +333,12 @@ export default function ChatPage() {
 
       const parsedActions = parseSpringActions(responseText);
       responseText = parsedActions.displayText || "Done. I handled that for you.";
-    // Check for embedded book additions
-    const bookMatch = responseText.match(/===BOOK===\n?([\s\S]*?)\n?===END===/);
-    if (bookMatch) {
-      try {
-        parsedBook = JSON.parse(bookMatch[1]);
-        cleanedResponse = cleanedResponse.replace(/===BOOK===\n?[\s\S]*?\n?===END===/, '').trim();
-      } catch (e) {
-        console.warn('Failed to parse book block:', e);
-      }
-    }
+
+      // Add the main response text to the chat
+      addChatMessage({
+        role: 'assistant',
+        message: responseText
+      });
 
       // If Spring created calendar events, add them
       parsedActions.events.forEach((parsedEvent) => {
