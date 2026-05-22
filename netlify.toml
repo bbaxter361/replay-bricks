@@ -1,6 +1,6 @@
 # Main Replay Bricks website and Spring API
 [build]
-  command = "npm ci --prefix website && npm run build --prefix website && npm install --prefix hold && npm run build --prefix hold && cp -r hold/dist website/dist/hold"
+  command = "bash build.sh"
   publish = "website/dist"
 
 [build.processing]
