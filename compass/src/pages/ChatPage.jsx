@@ -58,6 +58,12 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const chatHistoryRef = useRef(chatHistory);
+
+  // Keep chatHistoryRef in sync
+  useEffect(() => {
+    chatHistoryRef.current = chatHistory;
+  }, [chatHistory]);
 
   // Auto-scroll to bottom with cleanup
   useEffect(() => {
@@ -399,6 +405,7 @@ export default function ChatPage() {
         });
       });
     } catch (err) {
+      console.error('Spring API error:', err);
       addChatMessage({
         role: 'assistant',
         message: "I'm having trouble connecting right now. Let me try again — give me a moment! 🌸"
