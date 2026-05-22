@@ -21,7 +21,7 @@ cd "$COMPASS_DIR"
 VITE_API_URL="$API_URL" npm run build
 
 echo "📦 Deploying to Netlify..."
-NETLIFY_AUTH_TOKEN="nfp_NB2XEGLpijeXEpDGJDWwGysukttiPGJqb14b" npx netlify deploy --dir dist --prod --site 98ca3a41-6cda-413a-81a0-e2f3a7b03bb6
+NETLIFY_AUTH_TOKEN="nfc_qau3Rq6nLo4QvJrk2c3ub9Z5gVAAcw7W8579" /home/bbaxter/.hermes/node/bin/netlify deploy --dir dist --prod --site b07a2d62-7f71-4ba6-b647-3d4400b56996
 
 echo ""
 echo "✅ Done! Compass is live at https://compass-replaybricks.netlify.app"

@@ -311,6 +311,13 @@ export default function ChatPage() {
         body: JSON.stringify(body)
       });
 
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`API Error ${res.status}: ${errText}`);
+      }
+
+      const data = await res.json();
+
       let responseText = data.response || '';
         console.log('📋 [DEBUG] Raw API response data:', data);
         
