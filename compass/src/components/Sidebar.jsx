@@ -11,7 +11,8 @@ import {
   BookOpen,
   Menu,
   X,
-  Compass
+  Compass,
+  ArrowLeft
 } from 'lucide-react';
 
 const navItems = [
@@ -99,6 +100,17 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Back to Portal link */}
+        <div className="px-4 pb-2">
+          <a
+            href="https://replaybrick.com/"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-violet-500 hover:text-violet-700 hover:bg-violet-100 transition-all duration-200"
+          >
+            <ArrowLeft size={18} />
+            <span>Back to Portal</span>
+          </a>
+        </div>
 
         {/* Footer */}
         <div className="p-4 border-t border-violet-200">

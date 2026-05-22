@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
@@ -26,6 +27,16 @@ export default function App() {
       {/* Sidebar */}
       <Sidebar />
       
+      {/* Mobile: Back to Portal button (hidden on desktop where sidebar shows) */}
+      <a
+        href="https://replaybrick.com/"
+        className="fixed top-4 left-20 z-40 lg:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/90 backdrop-blur-sm border border-violet-200 text-xs font-medium text-violet-600 hover:bg-violet-50 hover:border-violet-300 transition-colors shadow-sm no-print"
+        aria-label="Back to Portal"
+      >
+        <ArrowLeft size={14} />
+        <span>Portal</span>
+      </a>
+
       {/* Main Content Area */}
       <main className="flex-1 lg:ml-64 min-h-screen pb-8">
         <Routes>
