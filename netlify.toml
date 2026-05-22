@@ -1,6 +1,6 @@
 # Main Replay Bricks website and Spring API
 [build]
-  command = "bash build.sh"
+  command = "sh build.sh"
   publish = "website/dist"
 
 [build.processing]
