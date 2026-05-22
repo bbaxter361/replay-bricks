@@ -289,6 +289,575 @@ async function seedColorsIfNeeded() {
 }
 
 // ============================================================
+// ============================================================
+// OAUTH 1.0a SIGNER (BrickLink API)
+// Uses only built-in crypto module — no external packages needed
+// ============================================================
+
+function oauthPercentEncode(str) {
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/\*/g, '%2A')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29');
+}
+
+function oauthNonce() {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+function oauthTimestamp() {
+  return Math.floor(Date.now() / 1000).toString();
+}
+
+function oauthSign(method, url, params, consumerSecret, tokenSecret) {
+  // Sort params alphabetically
+  const sortedKeys = Object.keys(params).sort();
+  const paramStr = sortedKeys.map(k => `${oauthPercentEncode(k)}=${oauthPercentEncode(String(params[k]))}`).join('&');
+  
+  // Build signature base string
+  const baseStr = [
+    method.toUpperCase(),
+    oauthPercentEncode(url),
+    oauthPercentEncode(paramStr)
+  ].join('&');
+  
+  // Signing key: consumerSecret + "&" + tokenSecret (empty string if no token)
+  const signingKey = oauthPercentEncode(consumerSecret) + '&' + oauthPercentEncode(tokenSecret || '');
+  
+  return crypto.createHmac('sha1', signingKey).update(baseStr).digest('base64');
+}
+
+function oauthHeader(method, url, params, consumerKey, consumerSecret, tokenValue, tokenSecret) {
+  const oauthParams = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: oauthNonce(),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: oauthTimestamp(),
+    oauth_version: '1.0',
+  };
+  if (tokenValue) {
+    oauthParams.oauth_token = tokenValue;
+  }
+  
+  // Merge oauth params with request params
+  const allParams = { ...params, ...oauthParams };
+  const signature = oauthSign(method, url, allParams, consumerSecret, tokenSecret);
+  oauthParams.oauth_signature = signature;
+  
+  // Build header
+  const headerParts = Object.entries(oauthParams)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${oauthPercentEncode(k)}="${oauthPercentEncode(String(v))}"`);
+  
+  return 'OAuth ' + headerParts.join(', ');
+}
+
+async function blApiGet(path, queryParams = {}) {
+  const creds = await loadBLCredentials();
+  if (!creds) throw new Error('BrickLink not configured');
+  
+  const url = 'https://api.bricklink.com/api/store/v1' + path;
+  const fullUrl = Object.keys(queryParams).length
+    ? url + '?' + new URLSearchParams(queryParams)
+    : url;
+  
+  const authHeader = oauthHeader('GET', url, queryParams,
+    creds.consumerKey, creds.consumerSecret, creds.tokenValue, creds.tokenSecret);
+  
+  const res = await fetch(fullUrl, {
+    headers: {
+      Authorization: authHeader,
+      Accept: 'application/json',
+    },
+  });
+  
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`BL API: Non-JSON (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.meta?.code && data.meta.code >= 400) {
+    throw new Error(`BL API ${data.meta.code}: ${data.meta.message || JSON.stringify(data.meta)}`);
+  }
+  return data.data || data;
+}
+
+async function blApiPost(path, body = {}) {
+  const creds = await loadBLCredentials();
+  if (!creds) throw new Error('BrickLink not configured');
+  
+  const url = 'https://api.bricklink.com/api/store/v1' + path;
+  const authHeader = oauthHeader('POST', url, {},
+    creds.consumerKey, creds.consumerSecret, creds.tokenValue, creds.tokenSecret);
+  
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: authHeader,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`BL API: Non-JSON (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.meta?.code && data.meta.code >= 400) {
+    throw new Error(`BL API ${data.meta.code}: ${data.meta.message}`);
+  }
+  return data.data || data;
+}
+
+// BrickOwl API (simple API key auth)
+async function boApiGet(path, queryParams = {}) {
+  const creds = await loadBOCredentials();
+  if (!creds) throw new Error('BrickOwl not configured');
+  queryParams.key = creds.apiKey;
+  
+  const url = 'https://api.brickowl.com/v1' + path + '?' + new URLSearchParams(queryParams);
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`BO API: Non-JSON (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.status === 'error') {
+    throw new Error(`BO API: ${data.message || JSON.stringify(data)}`);
+  }
+  return data.data || data;
+}
+
+async function boApiPost(path, params = {}) {
+  const creds = await loadBOCredentials();
+  if (!creds) throw new Error('BrickOwl not configured');
+  params.key = creds.apiKey;
+  
+  const url = 'https://api.brickowl.com/v1' + path;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
+  });
+  
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`BO API: Non-JSON (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.status === 'error') {
+    throw new Error(`BO API: ${data.message}`);
+  }
+  return data.data || data;
+}
+
+// Lazy credential loaders (cached per container)
+let _blCreds = undefined;
+let _boCreds = undefined;
+
+async function loadBLCredentials() {
+  if (_blCreds !== undefined) return _blCreds;
+  const creds = await blobRawGet('hold_api_credentials');
+  const bl = creds.find(c => c.marketplace === 'bricklink');
+  if (!bl) { _blCreds = null; return null; }
+  _blCreds = JSON.parse(bl.credentials);
+  return _blCreds;
+}
+
+async function loadBOCredentials() {
+  if (_boCreds !== undefined) return _boCreds;
+  const creds = await blobRawGet('hold_api_credentials');
+  const bo = creds.find(c => c.marketplace === 'brickowl');
+  if (!bo) { _boCreds = null; return null; }
+  _boCreds = JSON.parse(bo.credentials);
+  return _boCreds;
+}
+
+// ============================================================
+// SYNC ENGINE (embedded — no SQLite, uses Blob helpers)
+// ============================================================
+
+async function syncLogStart(marketplace, syncType) {
+  const entry = {
+    marketplace,
+    sync_type: syncType,
+    started_at: new Date().toISOString(),
+    status: 'running',
+    items_processed: 0,
+    errors: null,
+    details: null,
+  };
+  return await blobInsert('hold_sync_log', entry);
+}
+
+async function syncLogComplete(logId, status, count, errors) {
+  await blobUpdate('hold_sync_log', logId, {
+    status,
+    completed_at: new Date().toISOString(),
+    items_processed: count,
+    errors: errors?.length ? errors.join('; ') : null,
+  });
+}
+
+function upsertBLInventoryItem(item) {
+  // ... will be implemented inline with blob operations
+}
+
+async function syncBLInventory() {
+  const logId = await syncLogStart('bricklink', 'inventory');
+  let count = 0;
+  const errors = [];
+  
+  try {
+    let page = 1;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const result = await blApiGet('/inventories', { page, page_size: 500 });
+      const items = Array.isArray(result) ? result : (result.data || []);
+      
+      for (const item of items) {
+        try {
+          const partNo = item.item?.no || item.part_no;
+          const colorId = item.color_id ?? item.color?.color_id ?? null;
+          const partName = item.item?.name || item.part_name || '';
+          const condition = item.new_or_used === 'N' ? 'NEW' : 'USED';
+          const qty = parseInt(item.quantity || 0);
+          const priceCents = item.unit_price ? Math.round(parseFloat(item.unit_price) * 100) : 0;
+          
+          // Find existing inventory item
+          const inventory = await blobRawGet('hold_inventory');
+          let existing;
+          if (colorId !== null) {
+            existing = inventory.find(i => i.part_no === partNo && i.color_id === colorId && i.condition === condition);
+          } else {
+            existing = inventory.find(i => i.part_no === partNo && (i.color_id === null || i.color_id === undefined) && i.condition === condition);
+          }
+          
+          let invId;
+          if (existing) {
+            await blobUpdate('hold_inventory', existing.id, {
+              quantity: qty,
+              unit_price_cents: priceCents,
+              part_name: partName || existing.part_name,
+              updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+            });
+            invId = existing.id;
+          } else {
+            const created = await blobInsert('hold_inventory', {
+              part_no: partNo,
+              color_id: colorId,
+              part_name: partName,
+              quantity: qty,
+              condition,
+              unit_price_cents: priceCents,
+              location: item.location || null,
+              created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+              updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+            });
+            invId = created.id;
+          }
+          
+          // Upsert marketplace lot
+          const lots = await blobRawGet('hold_marketplace_lots');
+          const lotId = String(item.inventory_id);
+          const existingLot = lots.find(l => l.marketplace === 'bricklink' && l.lot_id === lotId);
+          
+          const lotData = {
+            inventory_id: invId,
+            marketplace: 'bricklink',
+            lot_id: lotId,
+            quantity: qty,
+            unit_price_cents: priceCents,
+            condition,
+            description: item.description || null,
+            remarks: item.remarks || null,
+            last_synced_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          };
+          
+          if (existingLot) {
+            await blobUpdate('hold_marketplace_lots', existingLot.id, lotData);
+          } else {
+            await blobInsert('hold_marketplace_lots', lotData);
+          }
+          
+          count++;
+        } catch (err) {
+          errors.push(`Item ${item.inventory_id}: ${err.message}`);
+        }
+      }
+      
+      hasMore = items.length >= 500;
+      page++;
+    }
+    
+    await syncLogComplete(logId, 'success', count, errors);
+    return { synced: count, errors };
+  } catch (err) {
+    await syncLogComplete(logId, 'failed', count, [err.message]);
+    throw err;
+  }
+}
+
+async function syncBLOrders() {
+  const logId = await syncLogStart('bricklink', 'orders');
+  let count = 0;
+  const errors = [];
+  
+  try {
+    let page = 1;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const result = await blApiGet('/orders', { page, page_size: 50 });
+      const orders = Array.isArray(result) ? result : (result.data || []);
+      
+      for (const order of orders) {
+        try {
+          const orderId = String(order.order_id);
+          const statusMap = { pending:'pending', updated:'pending', processing:'pending',
+            ready:'pending', paid:'paid', packed:'packed', shipped:'shipped',
+            received:'delivered', completed:'delivered', cancelled:'cancelled' };
+          const localStatus = statusMap[order.status] || 'pending';
+          
+          const totalPriceCents = order.grand_total ? Math.round(parseFloat(order.grand_total) * 100) : null;
+          const shippingCents = order.shipping_cost ? Math.round(parseFloat(order.shipping_cost) * 100) : 0;
+          
+          const orderData = {
+            marketplace: 'bricklink',
+            order_id: orderId,
+            buyer_name: order.buyer_name || (order.buyer?.buyer_name) || '',
+            buyer_email: order.buyer_email || null,
+            buyer_notes: null,
+            status: localStatus,
+            total_items: order.total_count || 0,
+            total_price_cents: totalPriceCents,
+            shipping_cents: shippingCents,
+            currency: order.currency_code || 'USD',
+            shipping_address: order.shipping_address ? JSON.stringify(order.shipping_address) : '',
+            order_date: order.date_ordered ? order.date_ordered.split('T')[0] : null,
+            paid_date: order.date_paid ? order.date_paid.split('T')[0] : null,
+            shipped_date: null,
+            tracking_number: order.tracking_no || null,
+            shipping_carrier: order.shipping_method?.name || null,
+            notes: order.admin_notes || null,
+            last_synced_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          };
+          
+          const existingOrders = await blobRawGet('hold_orders');
+          const existing = existingOrders.find(o => o.marketplace === 'bricklink' && o.order_id === orderId);
+          
+          if (existing) {
+            await blobUpdate('hold_orders', existing.id, orderData);
+          } else {
+            await blobInsert('hold_orders', orderData);
+          }
+          
+          count++;
+        } catch (err) {
+          errors.push(`Order ${order.order_id}: ${err.message}`);
+        }
+      }
+      
+      hasMore = orders.length >= 50;
+      page++;
+    }
+    
+    await syncLogComplete(logId, 'success', count, errors);
+    return { synced: count, errors };
+  } catch (err) {
+    await syncLogComplete(logId, 'failed', count, [err.message]);
+    throw err;
+  }
+}
+
+async function syncBOInventory() {
+  const logId = await syncLogStart('brickowl', 'inventory');
+  let count = 0;
+  const errors = [];
+  
+  try {
+    const result = await boApiGet('/inventory/list', { limit: 1000 });
+    const items = Array.isArray(result) ? result : (result.lots || result.list || []);
+    
+    for (const item of items) {
+      try {
+        const boid = item.boid || '';
+        const [elementId, boColorId] = boid.split('-');
+        const partNo = elementId || item.element_id || item.part_no || boid;
+        const colorId = boColorId ? parseInt(boColorId) : null;
+        const partName = item.name || item.part_name || '';
+        const condition = item.condition === 'N' ? 'NEW' : 'USED';
+        const qty = parseInt(item.qty || item.quantity || 0);
+        const priceCents = item.price ? Math.round(parseFloat(item.price) * 100) : 0;
+        
+        const inventory = await blobRawGet('hold_inventory');
+        let existing;
+        if (colorId !== null) {
+          existing = inventory.find(i => i.part_no === partNo && i.color_id === colorId && i.condition === condition);
+        } else {
+          existing = inventory.find(i => i.part_no === partNo && (i.color_id === null || i.color_id === undefined) && i.condition === condition);
+        }
+        
+        let invId;
+        if (existing) {
+          await blobUpdate('hold_inventory', existing.id, {
+            quantity: qty,
+            unit_price_cents: priceCents,
+            part_name: partName || existing.part_name,
+            updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          });
+          invId = existing.id;
+        } else {
+          const created = await blobInsert('hold_inventory', {
+            part_no: partNo,
+            color_id: colorId,
+            part_name: partName,
+            quantity: qty,
+            condition,
+            unit_price_cents: priceCents,
+            created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+            updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          });
+          invId = created.id;
+        }
+        
+        const lots = await blobRawGet('hold_marketplace_lots');
+        const lotId = String(item.lot_id || boid);
+        const existingLot = lots.find(l => l.marketplace === 'brickowl' && l.lot_id === lotId);
+        
+        const lotData = {
+          inventory_id: invId,
+          marketplace: 'brickowl',
+          lot_id: lotId,
+          quantity: qty,
+          unit_price_cents: priceCents,
+          condition,
+          description: item.description || null,
+          remarks: item.remarks || null,
+          last_synced_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        };
+        
+        if (existingLot) {
+          await blobUpdate('hold_marketplace_lots', existingLot.id, lotData);
+        } else {
+          await blobInsert('hold_marketplace_lots', lotData);
+        }
+        
+        count++;
+      } catch (err) {
+        errors.push(`Lot ${item.lot_id}: ${err.message}`);
+      }
+    }
+    
+    await syncLogComplete(logId, 'success', count, errors);
+    return { synced: count, errors };
+  } catch (err) {
+    await syncLogComplete(logId, 'failed', count, [err.message]);
+    throw err;
+  }
+}
+
+async function syncBOOrders() {
+  const logId = await syncLogStart('brickowl', 'orders');
+  let count = 0;
+  const errors = [];
+  
+  try {
+    const result = await boApiGet('/order/list', { limit: 100 });
+    const orders = Array.isArray(result) ? result : (result.list || []);
+    
+    for (const order of orders) {
+      try {
+        const orderId = String(order.order_id);
+        const statusMap = { unpaid:'pending', paid:'paid', picking:'picked', picked:'picked',
+          packing:'packed', packed:'packed', shipped:'shipped', delivered:'delivered',
+          cancelled:'cancelled', refunded:'cancelled' };
+        const localStatus = statusMap[order.status] || 'pending';
+        
+        const totalPriceCents = order.total ? Math.round(parseFloat(order.total) * 100) : null;
+        const shippingCents = order.shipping ? Math.round(parseFloat(order.shipping) * 100) : 0;
+        
+        const orderData = {
+          marketplace: 'brickowl',
+          order_id: orderId,
+          buyer_name: order.buyer_name || '',
+          buyer_email: order.buyer_email || null,
+          buyer_notes: null,
+          status: localStatus,
+          total_items: parseInt(order.item_count || order.total_items || 0),
+          total_price_cents: totalPriceCents,
+          shipping_cents: shippingCents,
+          currency: order.currency || 'USD',
+          shipping_address: order.shipping_address || '',
+          order_date: order.date_created ? order.date_created.split(' ')[0] : null,
+          paid_date: null,
+          shipped_date: null,
+          tracking_number: order.tracking || null,
+          shipping_carrier: null,
+          notes: order.notes || null,
+          last_synced_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        };
+        
+        const existingOrders = await blobRawGet('hold_orders');
+        const existing = existingOrders.find(o => o.marketplace === 'brickowl' && o.order_id === orderId);
+        
+        if (existing) {
+          await blobUpdate('hold_orders', existing.id, orderData);
+        } else {
+          await blobInsert('hold_orders', orderData);
+        }
+        
+        count++;
+      } catch (err) {
+        errors.push(`Order ${order.order_id}: ${err.message}`);
+      }
+    }
+    
+    await syncLogComplete(logId, 'success', count, errors);
+    return { synced: count, errors };
+  } catch (err) {
+    await syncLogComplete(logId, 'failed', count, [err.message]);
+    throw err;
+  }
+}
+
+async function syncAll() {
+  const results = {};
+  const blCreds = await loadBLCredentials();
+  const boCreds = await loadBOCredentials();
+  
+  if (blCreds) {
+    try {
+      console.log('Syncing BrickLink inventory...');
+      results.bricklink_inventory = await syncBLInventory();
+    } catch (e) { results.bricklink_inventory = { error: e.message }; }
+    
+    try {
+      console.log('Syncing BrickLink orders...');
+      results.bricklink_orders = await syncBLOrders();
+    } catch (e) { results.bricklink_orders = { error: e.message }; }
+  }
+  
+  if (boCreds) {
+    try {
+      console.log('Syncing BrickOwl inventory...');
+      results.brickowl_inventory = await syncBOInventory();
+    } catch (e) { results.brickowl_inventory = { error: e.message }; }
+    
+    try {
+      console.log('Syncing BrickOwl orders...');
+      results.brickowl_orders = await syncBOOrders();
+    } catch (e) { results.brickowl_orders = { error: e.message }; }
+  }
+  
+  return results;
+}
 // ROUTES
 // ============================================================
 
@@ -378,10 +947,26 @@ app.delete('/api/credentials/:marketplace', async (req, res) => {
 
 // ── SYNC ──
 app.post('/api/sync/:marketplace/:type', async (req, res) => {
-  res.status(501).json({
-    error: 'Sync not available in serverless mode — run the full hold server locally for BrickLink/BrickOwl sync operations.',
-    hint: 'Use hold/server/src/index.js with better-sqlite3 for sync operations.'
-  });
+  const { marketplace, type } = req.params;
+  try {
+    let result;
+    if (marketplace === 'bricklink' && type === 'inventory') {
+      result = await syncBLInventory();
+    } else if (marketplace === 'bricklink' && type === 'orders') {
+      result = await syncBLOrders();
+    } else if (marketplace === 'brickowl' && type === 'inventory') {
+      result = await syncBOInventory();
+    } else if (marketplace === 'brickowl' && type === 'orders') {
+      result = await syncBOOrders();
+    } else if (marketplace === 'all' && type === 'all') {
+      result = await syncAll();
+    } else {
+      return res.status(400).json({ error: `Unknown sync: ${marketplace}/${type}` });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── SYNC LOGS ──
@@ -1096,7 +1681,11 @@ app.get('/api/marketplace-lots/:marketplace', async (req, res) => {
 
 // ── SYNC BEACON ──
 app.post('/api/sync/beacon', async (req, res) => {
-  res.json({ ok: true, queued: true, note: 'Sync not executed in serverless mode. Run locally.' });
+  res.json({ ok: true, queued: true });
+  // Fire sync asynchronously after response
+  syncAll()
+    .then(r => console.log('Beacon sync completed:', Object.keys(r)))
+    .catch(err => console.error('Beacon sync failed:', err.message));
 });
 
 // ── PENDING ITEMS ──

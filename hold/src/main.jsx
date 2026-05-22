@@ -16,7 +16,7 @@ window.addEventListener('beforeunload', () => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/hold">
       <ThemeProvider>
         <AuthProvider>
           <DataProvider>
