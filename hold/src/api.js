@@ -92,6 +92,12 @@ export const api = {
   getItemPrices: (id) => request(`/inventory/${id}/prices`),
   refreshAllPrices: () =>
     request('/inventory/refresh-prices', { method: 'POST' }),
+  refreshPrices: (condition) =>
+    request(`/inventory/refresh-prices?condition=${condition}`, { method: 'POST' }),
+
+  // Price Dashboard
+  getPriceSummary: () => request('/prices/summary'),
+  getPriceFreshness: () => request('/prices/freshness'),
 
   // Pending Items (Voice Import)
   getPendingItems: () => request('/pending'),

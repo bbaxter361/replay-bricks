@@ -1,0 +1,33 @@
+/* Price Dashboard table row color coding */
+.alert-overpriced {
+  background: #3b1515;
+}
+.alert-overpriced:hover {
+  background: #4a1c1c;
+}
+.alert-underpriced {
+  background: #0f2b1a;
+}
+.alert-underpriced:hover {
+  background: #163824;
+}
+
+/* Delta percentage coloring */
+.delta.above {
+  color: #ef4444;
+  font-weight: 600;
+}
+.delta.below {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* Table responsive scrolling */
+.price-dashboard-table {
+  min-width: 900px;
+}
+
+/* Tabular number alignment */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

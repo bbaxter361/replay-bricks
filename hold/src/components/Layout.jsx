@@ -12,6 +12,7 @@ const navItems = [
   { to: '/inventory', icon: Package, label: 'Inventory' },
   { to: '/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/pricing', icon: DollarSign, label: 'Auto-Pricing' },
+  { to: '/price-dashboard', icon: BarChart3, label: 'Price Dashboard' },
   { to: '/part-out', icon: Puzzle, label: 'Part-Out Tool' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
   { to: '/marketplaces', icon: Store, label: 'Marketplaces' },

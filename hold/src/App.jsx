@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
 import Orders from './pages/Orders'
 import Pricing from './pages/Pricing'
+import PriceDashboard from './components/PriceDashboard'
 import PartOut from './pages/PartOut'
 import Reports from './pages/Reports'
 import Marketplaces from './pages/Marketplaces'
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/price-dashboard" element={<PriceDashboard />} />
               <Route path="/part-out" element={<PartOut />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/marketplaces" element={<Marketplaces />} />
