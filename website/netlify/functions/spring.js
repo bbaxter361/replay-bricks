@@ -24,9 +24,11 @@ const urlRegex = /https?:\/\/[^\s<>)"']+/gi;
 const SPRING_TIME_ZONE = process.env.SPRING_TIME_ZONE || 'America/Chicago';
 
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+  origin: ['https://replaybrick.com', 'https://compass-replaybricks-v2-550.netlify.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  credentials: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json({ limit: '50mb' }));
 
@@ -39,6 +41,49 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+// ── In-Memory Rate Limiter ──
+// Per-IP request tracking with configurable windows.
+// Data lost on cold starts (acceptable for Netlify functions).
+const rateLimitStore = new Map();
+
+function rateLimiter({ windowMs, maxRequests, label }) {
+  return (req, res, next) => {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+      || req.headers['x-real-ip']
+      || req.socket?.remoteAddress
+      || 'unknown';
+    const key = `${label}:${ip}`;
+    const now = Date.now();
+    const entry = rateLimitStore.get(key);
+
+    if (!entry || now > entry.resetAt) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxRequests) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({
+        error: 'Too many requests',
+        retryAfter,
+        message: `Rate limit of ${maxRequests} requests per ${Math.round(windowMs / 1000)}s exceeded. Retry in ${retryAfter}s.`
+      });
+    }
+
+    entry.count++;
+    next();
+  };
+}
+
+// Clean up expired rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore) {
+    if (now > entry.resetAt) rateLimitStore.delete(key);
+  }
+}, 5 * 60 * 1000).unref();
 
 // ── API Key Auth Middleware ──
 // Protects all endpoints except health check
@@ -576,6 +621,46 @@ async function getBlobStore() {
 // Cache to avoid re-creating store on every call within the same container
 let _cachedBlobStore = null;
 
+// ── Audit Log ──
+// Append-only audit trail for state compliance.
+// Stored alongside app data using the same blob/Memory store.
+// Entries are immutable — no update or delete operations exposed.
+const AUDIT_LOG_KEY = '__audit_log__';
+
+async function getAuditLog() {
+  const store = await getBlobStore();
+  if (store instanceof Map) {
+    const raw = store.get(AUDIT_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }
+  const data = await store.get(AUDIT_LOG_KEY, { type: 'json' });
+  return Array.isArray(data) ? data : [];
+}
+
+async function appendAuditLog(entry) {
+  const log = await getAuditLog();
+  const auditEntry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    user: entry.user || 'system',
+    action: entry.action || 'unknown',
+    details: entry.details || '',
+    key: entry.key || null,
+  };
+  log.push(auditEntry);
+
+  // Keep last 10,000 entries to bound storage
+  const trimmed = log.length > 10000 ? log.slice(-10000) : log;
+
+  const store = await getBlobStore();
+  if (store instanceof Map) {
+    store.set(AUDIT_LOG_KEY, JSON.stringify(trimmed));
+  } else {
+    await store.setJSON(AUDIT_LOG_KEY, trimmed);
+  }
+  console.log(`📋 Audit: ${auditEntry.action} — ${auditEntry.details}`);
+}
+
 // ── URL Extraction Helpers ──
 
 /**
@@ -651,7 +736,7 @@ async function fetchUrlContent(url) {
 }
 
 // ── Chat endpoint ──
-app.post('/api/chat', apiKeyAuth, async (req, res) => {
+app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30, label: 'chat' }), async (req, res) => {
   try {
     const { message, image, docText, fileName, history } = req.body;
 
@@ -799,7 +884,7 @@ app.post('/api/import-calendar', apiKeyAuth, upload.single('file'), async (req, 
 });
 
 // ── Blobs: Save data ──
-app.post('/api/data/save', apiKeyAuth, async (req, res) => {
+app.post('/api/data/save', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60, label: 'data' }), async (req, res) => {
   try {
     const { key, value } = req.body;
     const store = await getBlobStore();
@@ -808,6 +893,13 @@ app.post('/api/data/save', apiKeyAuth, async (req, res) => {
     } else {
       await store.setJSON(key, value);
     }
+    // Append audit log entry for state compliance
+    await appendAuditLog({
+      action: 'data_save',
+      key,
+      user: req.headers['x-api-key'] ? 'authenticated' : 'unknown',
+      details: `Saved key "${key}"`
+    });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -815,7 +907,7 @@ app.post('/api/data/save', apiKeyAuth, async (req, res) => {
 });
 
 // ── Blobs: Status / health check (must be before :key route) ──
-app.get('/api/data/status', apiKeyAuth, async (req, res) => {
+app.get('/api/data/status', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60, label: 'data' }), async (req, res) => {
   try {
     const store = await getBlobStore();
     const isMemory = store instanceof Map;
@@ -847,8 +939,30 @@ app.get('/api/data/status', apiKeyAuth, async (req, res) => {
   }
 });
 
+// ── Audit Log: Read-only endpoint ──
+// Append-only audit trail for state compliance.
+// Entries are immutable — no PUT, PATCH, or DELETE on this endpoint.
+app.get('/api/data/audit', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60, label: 'data' }), async (req, res) => {
+  try {
+    const log = await getAuditLog();
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    // Return most recent first
+    const sorted = [...log].reverse();
+    const page = sorted.slice(offset, offset + limit);
+    res.json({
+      total: log.length,
+      offset,
+      limit,
+      entries: page,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Blobs: Get data ──
-app.get('/api/data/:key', apiKeyAuth, async (req, res) => {
+app.get('/api/data/:key', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60, label: 'data' }), async (req, res) => {
   try {
     const store = await getBlobStore();
     let data;
@@ -865,7 +979,7 @@ app.get('/api/data/:key', apiKeyAuth, async (req, res) => {
 });
 
 // ── Blobs: List all keys ──
-app.get('/api/data', apiKeyAuth, async (req, res) => {
+app.get('/api/data', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60, label: 'data' }), async (req, res) => {
   try {
     const store = await getBlobStore();
     let keys;

@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API, API_BASE, apiFetch } from '../api';
+import { API, API_BASE, API_KEY, apiFetch } from '../api';
 import { buildImageDocText } from '../utils/imageUploadText';
 import { parseSpringActions } from '../utils/springActions';
 
@@ -250,7 +250,7 @@ export default function ChatPage() {
               const backupRes = await fetch('https://replaybricksv2.netlify.app/api/read-file', {
                 method: 'POST',
                 headers: {
-                  'x-api-key': 'spring-vicki-2026'
+                  ...(API_KEY ? { 'x-api-key': API_KEY } : {})
                 },
                 body: formData
               });

@@ -19,7 +19,11 @@ export const API = {
 
 export { API_BASE };
 
-const API_KEY = 'spring-vicki-2026';
+// API key comes from build-time env var (VITE_SPRING_API_KEY in Netlify dashboard)
+// Falls back to empty string if not set — protected endpoints will return 401
+const API_KEY = import.meta.env.VITE_SPRING_API_KEY || '';
+
+export { API_KEY };
 
 export async function apiFetch(url, options = {}) {
   const isFormData = options.body instanceof FormData;
@@ -40,11 +44,12 @@ export async function apiFetch(url, options = {}) {
   if (isFormData) {
     const { 'Content-Type': _, ...safeHeaders } = (options.headers || {});
     const separator = url.includes('?') ? '&' : '?';
-    return fetch(`${url}${separator}api_key=${API_KEY}`, {
+    const apiKeyParam = API_KEY ? `${separator}api_key=${API_KEY}` : '';
+    return fetch(`${url}${apiKeyParam}`, {
       ...options,
       headers: {
         ...safeHeaders,
-        'x-api-key': API_KEY,
+        ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
       },
     });
   }
@@ -52,7 +57,7 @@ export async function apiFetch(url, options = {}) {
   // For regular (JSON/text) requests, merge headers normally
   const headers = {
     ...(options.headers || {}),
-    'x-api-key': API_KEY,
+    ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
   };
 
   return fetch(url, {
