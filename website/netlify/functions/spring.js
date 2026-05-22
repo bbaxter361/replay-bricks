@@ -511,14 +511,70 @@ ${getSpringDateContext(now)}`;
 }
 
 // ── Blobs data helpers ──
+let blobStoreMode = 'unknown'; // 'netlify-blobs' | 'memory' | 'unknown'
+let blobStoreError = null;
+
 async function getBlobStore() {
-  // Fall back to memory store if running locally without netlify context
-  try {
-    return getStore('compass-data');
-  } catch {
-    return new Map();
+  // If we already have a working store cached, return it (includes Map fallback)
+  if (_cachedBlobStore && (blobStoreMode === 'netlify-blobs' || blobStoreMode === 'memory')) {
+    return _cachedBlobStore;
   }
+
+  // Approach 1: Use Netlify's automatic environment context (NETLIFY_BLOBS_CONTEXT)
+  try {
+    const store = getStore('compass-data');
+    // Verify it actually works by making a lightweight call
+    await store.list({ prefix: '__health_check__' });
+    _cachedBlobStore = store;
+    blobStoreMode = 'netlify-blobs';
+    blobStoreError = null;
+    console.log('✅ Netlify Blobs connected (automatic context) — data WILL persist');
+    return store;
+  } catch (e) {
+    console.warn('⚠️  Netlify Blobs auto-context failed:', e.message);
+    blobStoreError = `auto-context: ${e.message}`;
+  }
+
+  // Approach 2: Explicit config using env vars NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN
+  const siteID = process.env.NETLIFY_SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_ACCESS_TOKEN;
+  if (siteID && token) {
+    try {
+      const store = getStore({
+        name: 'compass-data',
+        siteID,
+        token,
+        apiURL: process.env.NETLIFY_BLOBS_API_URL,
+      });
+      await store.list({ prefix: '__health_check__' });
+      _cachedBlobStore = store;
+      blobStoreMode = 'netlify-blobs';
+      blobStoreError = null;
+      console.log('✅ Netlify Blobs connected (explicit config) — data WILL persist');
+      return store;
+    } catch (e) {
+      console.warn('⚠️  Netlify Blobs explicit config failed:', e.message);
+      blobStoreError = `explicit-config: ${e.message}`;
+    }
+  } else {
+    console.warn('⚠️  No NETLIFY_SITE_ID / NETLIFY_BLOBS_TOKEN env vars set — cannot try explicit Blobs config');
+    if (!blobStoreError) blobStoreError = 'missing NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN env vars';
+  }
+
+  // FALLBACK: In-memory Map — cached so data survives between requests within the same container
+  // NOTE: Data is lost on cold starts! Enable Netlify Blobs for true durability.
+  const map = new Map();
+  _cachedBlobStore = map;
+  blobStoreMode = 'memory';
+  console.error('❌ CRITICAL: Netlify Blobs unavailable! Using in-memory Map (cached per container).');
+  console.error('   Compass data WILL be lost on cold starts or after deploys.');
+  console.error('   To fix: enable Netlify Blobs for this site in the Netlify dashboard,');
+  console.error('   or set NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN environment variables.');
+  return map;
 }
+
+// Cache to avoid re-creating store on every call within the same container
+let _cachedBlobStore = null;
 
 // ── URL Extraction Helpers ──
 
@@ -758,6 +814,39 @@ app.post('/api/data/save', apiKeyAuth, async (req, res) => {
   }
 });
 
+// ── Blobs: Status / health check (must be before :key route) ──
+app.get('/api/data/status', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+    const isMemory = store instanceof Map;
+
+    let testResult = null;
+    if (!isMemory) {
+      try {
+        // Write a test key and read it back
+        const testKey = '__blob_health_test__';
+        const testValue = { ts: Date.now(), status: 'ok' };
+        await store.setJSON(testKey, testValue);
+        const readBack = await store.get(testKey, { type: 'json' });
+        await store.delete(testKey);
+        testResult = readBack && readBack.ts === testValue.ts ? 'pass' : 'fail';
+      } catch (e) {
+        testResult = `fail: ${e.message}`;
+      }
+    }
+
+    res.json({
+      mode: blobStoreMode,
+      durable: !isMemory,
+      healthTest: testResult || (isMemory ? 'n/a (in-memory)' : null),
+      error: blobStoreError || null,
+      inMemorySize: isMemory ? store.size : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Blobs: Get data ──
 app.get('/api/data/:key', apiKeyAuth, async (req, res) => {
   try {
@@ -881,6 +970,8 @@ app.get('/api/health', (req, res) => {
     version: '2.0.0',
     model: DEEPSEEK_MODEL,
     blobs: true,
+    blobStoreMode,
+    blobStoreError: blobStoreError || null,
   });
 });
 
