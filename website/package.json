@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "cp -rv ../hold/dist dist/hold",
+    "postbuild": "cp -rv ../hold/dist dist/hold 2>/dev/null || true",
     "test": "node --test tests/*.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
