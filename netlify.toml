@@ -28,11 +28,26 @@
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://replaybricksv2.netlify.app https://api.deepseek.com https://api.openai.com https://api.canva.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
+# ── API redirects ──
+# Hold inventory API (more specific — must come BEFORE Spring catch-all)
+[[redirects]]
+  from = "/api/hold/*"
+  to = "/.netlify/functions/hold"
+  status = 200
+
+# Spring API (Compass/chat — catches all other /api/*)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/spring"
   status = 200
 
+# Hold SPA — serve the inventory app at /hold
+[[redirects]]
+  from = "/hold/*"
+  to = "/hold/index.html"
+  status = 200
+
+# Main site SPA catch-all (keep LAST)
 [[redirects]]
   from = "/*"
   to = "/index.html"

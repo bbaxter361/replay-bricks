@@ -1,5 +1,9 @@
 // API service layer for Hold backend
-const API_BASE = 'http://localhost:3002/api';
+// In production: uses Netlify Function at replaybrick.com/api/hold
+// In development: uses local Express server
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3002/api'
+  : 'https://replaybrick.com/api/hold';
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
