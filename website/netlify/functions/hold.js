@@ -880,14 +880,15 @@ app.post('/api/seed', async (req, res) => {
   }
 });
 
-// ── STATUS ──
 app.get('/api/status', async (req, res) => {
   try {
     await seedColorsIfNeeded();
+    const blCreds = await loadBLCredentials();
+    const boCreds = await loadBOCredentials();
     res.json({
       ok: true,
-      bricklink: false,
-      brickowl: false,
+      bricklink: !!blCreds,
+      brickowl: !!boCreds,
       db: true,
       blobStoreMode,
     });
