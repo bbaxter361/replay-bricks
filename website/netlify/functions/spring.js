@@ -1,7 +1,8 @@
-// Spring — Netlify Function
+// Spring v3.0 — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
-// Uses DeepSeek V4 Flash for production
+// Uses DeepSeek V4 Pro for production
+// v3.0: Upgraded to deepseek-v4-pro, added conversation memory, web search
 
 import serverless from 'serverless-http';
 import express from 'express';
@@ -102,7 +103,7 @@ function apiKeyAuth(req, res, next) {
 // Spring uses DeepSeek directly — cheap and fast for Amanda's needs
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEEPSEEK_MODEL = 'deepseek-v4-pro';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4.1-mini';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
@@ -140,7 +141,7 @@ async function callAI(systemPrompt, userMessage, imageBase64, history) {
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
       messages,
-      max_tokens: 2000,
+      max_tokens: 6000,
       temperature: 0.7
     })
   });
@@ -498,7 +499,9 @@ You are an expert in:
 - Use specific, actionable suggestions — not vague ideas
 - Keep responses concise for a busy Activities Director
 - If Amanda shares a photo, acknowledge it and offer to help describe what she can do with the items shown
-- You are powered by DeepSeek V4 Pro AI model - if asked about your model, mention this
+- You are powered by DeepSeek V4 Pro AI model — if asked about your model, mention this
+- You have a memory now! You can see recent conversation history and will naturally reference past chats. If Amanda mentions something you discussed before, show that you remember.
+- When Amanda shares web links, you'll read the page content and use it to help her. If she asks you to search for something online, tell her to share a link and you'll look at it together.
 
 ## CALENDAR SYSTEM
 Amanda's Compass app has TWO calendars: Assisted Living and Memory Care. When suggesting or creating activities:
@@ -689,7 +692,7 @@ async function fetchUrlContent(url) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Spring-Compass/2.0 (Activities Assistant)',
+        'User-Agent': 'Spring-Compass/3.0 (Activities Assistant)',
         'Accept': 'text/html,text/plain,*/*'
       }
     });
@@ -736,6 +739,62 @@ async function fetchUrlContent(url) {
   }
 }
 
+// ── Conversation Memory ──
+// Stores/retrieves recent conversation context from Netlify Blobs.
+// This gives Spring long-term memory of past chats with Amanda.
+const MEMORY_KEY = 'chatHistory';
+const MAX_MEMORY_TURNS = 20; // Keep last 20 exchanges
+
+async function getMemoryContext() {
+  try {
+    const store = await getBlobStore();
+    let history;
+    if (store instanceof Map) {
+      const raw = store.get(MEMORY_KEY);
+      history = raw ? JSON.parse(raw) : [];
+    } else {
+      history = await store.get(MEMORY_KEY, { type: 'json' });
+    }
+    if (!Array.isArray(history) || history.length === 0) return '';
+    
+    // Take last N turns and format as context
+    const recent = history.slice(-MAX_MEMORY_TURNS);
+    return recent.map(turn => 
+      `[${turn.role === 'user' ? 'Amanda' : 'Spring'}, ${turn.timestamp || 'earlier'}]: ${turn.content?.substring(0, 500) || ''}`
+    ).join('\n');
+  } catch (e) {
+    console.warn('Memory read failed:', e.message);
+    return '';
+  }
+}
+
+async function saveMemoryTurn(role, content) {
+  try {
+    const store = await getBlobStore();
+    let history;
+    if (store instanceof Map) {
+      const raw = store.get(MEMORY_KEY);
+      history = raw ? JSON.parse(raw) : [];
+    } else {
+      history = await store.get(MEMORY_KEY, { type: 'json' }) || [];
+    }
+    history.push({
+      role,
+      content: content?.substring(0, 2000) || '',
+      timestamp: new Date().toISOString()
+    });
+    // Keep last 100 turns max
+    const trimmed = history.length > 100 ? history.slice(-100) : history;
+    if (store instanceof Map) {
+      store.set(MEMORY_KEY, JSON.stringify(trimmed));
+    } else {
+      await store.setJSON(MEMORY_KEY, trimmed);
+    }
+  } catch (e) {
+    console.warn('Memory save failed:', e.message);
+  }
+}
+
 // ── Chat endpoint ──
 app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30, label: 'chat' }), async (req, res) => {
   try {
@@ -763,6 +822,9 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
       }
     }
 
+    // Load conversation memory (past chats with Amanda)
+    const memoryContext = await getMemoryContext();
+
     // Build the user message
     let fullMessage = '';
     if (docText && fileName) {
@@ -773,12 +835,19 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
 
     const urlContext = await fetchUrlContext(message);
     if (urlContext) {
-      fullMessage = `${fullMessage}
-
-${urlContext}`;
+      fullMessage = `${fullMessage}\n\n${urlContext}`;
     }
 
-    const reply = await callAI(buildSpringSystemPrompt(), fullMessage, image, history);
+    // Inject memory into system prompt
+    const systemPrompt = buildSpringSystemPrompt() + 
+      (memoryContext ? `\n\n## RECENT CONVERSATION HISTORY\n${memoryContext}\n\nUse this context to maintain continuity. Reference past conversations naturally when relevant.` : '');
+
+    const reply = await callAI(systemPrompt, fullMessage, image, history);
+    
+    // Save this conversation turn to memory
+    if (message) saveMemoryTurn('user', message);
+    saveMemoryTurn('assistant', reply);
+    
     res.json({ response: reply });
 
   } catch (err) {
@@ -1026,7 +1095,7 @@ app.get('/api/data/export', apiKeyAuth, rateLimiter({ windowMs: 60000, maxReques
     });
 
     if (format === 'csv') {
-      let csv = `# Compass Data Export\n# Exported: ${new Date().toISOString()}\n# Integrity SHA-256: ${dataFingerprint}\n# Audited by: Spring v2.0\n\n`;
+      let csv = `# Compass Data Export\n# Exported: ${new Date().toISOString()}\n# Integrity SHA-256: ${dataFingerprint}\n# Audited by: Spring v3.0\n\n`;
       for (const key of exportKeys) {
         const recs = Array.isArray(records[key]) ? records[key] : (records[key] ? [records[key]] : []);
         csv += jsonToCSV(recs, key);
@@ -1039,7 +1108,7 @@ app.get('/api/data/export', apiKeyAuth, rateLimiter({ windowMs: 60000, maxReques
     res.json({
       exportedAt: new Date().toISOString(),
       dataHash: dataFingerprint,
-      exportedBy: 'Spring v2.0 (Netlify)',
+      exportedBy: 'Spring v3.0 (Netlify)',
       keyCount: exportKeys.length,
       recordCounts,
       records,
@@ -1173,7 +1242,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Spring (Netlify)',
-    version: '2.0.0',
+    version: '3.0.0',
     model: DEEPSEEK_MODEL,
     blobs: true,
     blobStoreMode,
