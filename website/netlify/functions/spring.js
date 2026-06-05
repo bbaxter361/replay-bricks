@@ -759,9 +759,10 @@ async function getMemoryContext() {
     
     // Take last N turns and format as context
     const recent = history.slice(-MAX_MEMORY_TURNS);
-    return recent.map(turn => 
-      `[${turn.role === 'user' ? 'Amanda' : 'Spring'}, ${turn.timestamp || 'earlier'}]: ${turn.content?.substring(0, 500) || ''}`
-    ).join('\n');
+    return recent.map(turn => {
+      const text = turn.message || turn.content || '';
+      return `[${turn.role === 'user' ? 'Amanda' : 'Spring'}, ${turn.timestamp || 'earlier'}]: ${text.substring(0, 500)}`;
+    }).join('\n');
   } catch (e) {
     console.warn('Memory read failed:', e.message);
     return '';
