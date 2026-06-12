@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+function ExternalRedirect({ to }) {
+  useEffect(() => { window.location.href = to; }, [to]);
+  return null;
+}
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import About from './components/About';
@@ -13,7 +18,6 @@ import Footer from './components/Footer';
 import BrickBackground from './components/BrickBackground';
 import LoginPage from './pages/LoginPage';
 import PortalPage from './pages/PortalPage';
-import InventoryPage from './pages/InventoryPage';
 import CompassPage from './pages/CompassPage';
 import GamesPage from './pages/GamesPage';
 import BaxterFamilyPage from './pages/BaxterFamilyPage';
@@ -100,13 +104,7 @@ function App() {
         />
         <Route
           path="/inventory"
-          element={
-            user ? (
-              <InventoryPage user={user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={<Redirect to="https://replaybrick.com/hold/" />}
         />
         <Route
           path="/compass"

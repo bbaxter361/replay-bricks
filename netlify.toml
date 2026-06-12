@@ -38,6 +38,12 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
 
 # ── API redirects ──
+# Hold inventory app — redirect /inventory to /hold/
+[[redirects]]
+  from = "/inventory"
+  to = "/hold/"
+  status = 301
+
 # Hold inventory API (more specific — must come BEFORE Spring catch-all)
 [[redirects]]
   from = "/api/hold/*"
