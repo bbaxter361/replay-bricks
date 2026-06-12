@@ -34,7 +34,7 @@ export default function Sidebar() {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-50 lg:hidden p-2.5 rounded-lg bg-violet-50 border border-violet-200 text-violet-500 hover:bg-violet-100 transition-colors no-print"
+        className="fixed top-4 left-4 z-50 md:hidden p-2.5 rounded-lg bg-violet-50 border border-violet-200 text-violet-500 hover:bg-violet-100 transition-colors no-print"
         aria-label="Open navigation menu"
       >
         <Menu size={24} />
@@ -43,7 +43,7 @@ export default function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -54,7 +54,7 @@ export default function Sidebar() {
           fixed top-0 left-0 h-full w-64 z-50
           bg-violet-50 border-r border-violet-200 shadow-lg
           transform transition-transform duration-300 ease-in-out
-          lg:translate-x-0 lg:static lg:z-auto
+          md:translate-x-0 md:static md:z-auto md:shadow-none md:w-56
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           flex flex-col
         `}
@@ -75,7 +75,7 @@ export default function Sidebar() {
         {/* Mobile close button */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-violet-100 lg:hidden"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-violet-100 md:hidden"
           aria-label="Close navigation menu"
         >
           <X size={22} />

@@ -28,10 +28,10 @@ export default function App() {
       {/* Sidebar */}
       <Sidebar />
       
-      {/* Mobile: Back to Portal button (hidden on desktop where sidebar shows) */}
+      {/* Mobile: Back to Portal button (hidden on desktop where sidebar shows the link) */}
       <a
         href="https://replaybrick.com/"
-        className="fixed top-4 left-20 z-40 lg:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/90 backdrop-blur-sm border border-violet-200 text-xs font-medium text-violet-600 hover:bg-violet-50 hover:border-violet-300 transition-colors shadow-sm no-print"
+        className="fixed top-4 right-4 z-40 md:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/90 backdrop-blur-sm border border-violet-200 text-xs font-medium text-violet-600 hover:bg-violet-50 hover:border-violet-300 transition-colors shadow-sm no-print"
         aria-label="Back to Portal"
       >
         <ArrowLeft size={14} />
@@ -39,7 +39,7 @@ export default function App() {
       </a>
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:ml-64 min-h-screen pb-8">
+      <main className="flex-1 md:ml-56 min-h-screen pb-8 pt-16 md:pt-0">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<CalendarPage />} />
