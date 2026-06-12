@@ -141,7 +141,7 @@ async function callAI(systemPrompt, userMessage, imageBase64, history) {
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
       messages,
-      max_tokens: 6000,
+      max_tokens: 2000,
       temperature: 0.7
     })
   });
@@ -783,8 +783,17 @@ async function getMemoryContext() {
   }
 }
 
+// Mutex for saveMemoryTurn to prevent read-modify-write races
+let _memorySaveLock = Promise.resolve();
+
 async function saveMemoryTurn(role, content) {
+  // Chain saves sequentially — each waits for the previous to complete
+  const prev = _memorySaveLock;
+  let resolveNext;
+  _memorySaveLock = new Promise(r => { resolveNext = r; });
+
   try {
+    await prev;
     const store = await getBlobStore();
     let history;
     if (store instanceof Map) {
@@ -807,6 +816,8 @@ async function saveMemoryTurn(role, content) {
     }
   } catch (e) {
     console.warn('Memory save failed:', e.message);
+  } finally {
+    resolveNext();
   }
 }
 
@@ -848,11 +859,6 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
       fullMessage = message + webContext;
     }
 
-    const urlContext = await fetchUrlContext(message);
-    if (urlContext) {
-      fullMessage = `${fullMessage}\n\n${urlContext}`;
-    }
-
     // Inject memory into system prompt
     const systemPrompt = buildSpringSystemPrompt() + 
       (memoryContext ? `\n\n## RECENT CONVERSATION HISTORY\n${memoryContext}\n\nUse this context to maintain continuity. Reference past conversations naturally when relevant.` : '');
@@ -889,9 +895,20 @@ app.post('/api/read-file', apiKeyAuth, upload.single('file'), async (req, res) =
 
     const filePath = req.file.path;
     const ext = path.extname(req.file.originalname).toLowerCase();
+    
+    // Security: validate extension against whitelist
+    const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.xls', '.csv', '.txt', '.rtf', '.md', '.json', '.xml', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      try { fs.unlinkSync(filePath); } catch {}
+      return res.status(400).json({ error: `Unsupported file type: ${ext}. Accepted: PDF, Word, Excel, CSV, text, and images.` });
+    }
+    
+    // Security: prevent path traversal in originalname
+    const safeName = path.basename(req.file.originalname);
+    
     let text = '';
 
-    console.log(`📄 Reading file: ${req.file.originalname} (${ext})`);
+    console.log(`📄 Reading file: ${safeName} (${ext})`);
 
     text = await extractTextFromUpload(filePath, req.file.originalname);
     if (!text) text = `[Unsupported or unreadable file type: ${ext}. Unable to extract text.]`;

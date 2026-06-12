@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { apiFetch, API } from '../api';
 
 const STORAGE_KEY = 'compass-app-data';
-const BLOB_KEYS = ['contacts', 'events', 'chatHistory', 'conversations', 'books'];
+const BLOB_KEYS = ['contacts', 'events', 'chatHistory', 'books'];
 
 // Load data from localStorage or return empty state
 function loadData() {
@@ -15,10 +15,7 @@ function loadData() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      
-      // Validate data structure to prevent corruption issues
       const validatedData = validateAndSanitizeData(parsed);
-      
       return {
         contacts: validatedData.contacts,
         events: validatedData.events,
@@ -30,8 +27,6 @@ function loadData() {
     }
   } catch (e) {
     console.warn('Failed to load stored data, using empty data:', e);
-    
-    // Clear corrupted data
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch (clearError) {
@@ -39,7 +34,6 @@ function loadData() {
     }
   }
 
-  // First run or corrupted data - return empty state
   return {
     contacts: [],
     events: [],
@@ -60,7 +54,6 @@ function validateAndSanitizeData(data) {
     books: []
   };
 
-  // Validate contacts
   if (Array.isArray(data.contacts)) {
     sanitized.contacts = data.contacts.filter(contact => 
       contact && typeof contact === 'object' && 
@@ -68,7 +61,6 @@ function validateAndSanitizeData(data) {
     );
   }
 
-  // Validate events
   if (Array.isArray(data.events)) {
     sanitized.events = data.events.filter(event => 
       event && typeof event === 'object' && 
@@ -77,7 +69,6 @@ function validateAndSanitizeData(data) {
     );
   }
 
-  // Validate chat history - most critical for our issue
   if (Array.isArray(data.chatHistory)) {
     sanitized.chatHistory = data.chatHistory
       .filter(msg => 
@@ -86,10 +77,9 @@ function validateAndSanitizeData(data) {
         typeof msg.role === 'string' &&
         msg.id && msg.timestamp
       )
-      .slice(-200); // Keep only last 200 messages to prevent performance issues
+      .slice(-500);
   }
 
-  // Validate conversations
   if (Array.isArray(data.conversations)) {
     sanitized.conversations = data.conversations.filter(conv => 
       conv && typeof conv === 'object' && 
@@ -98,7 +88,6 @@ function validateAndSanitizeData(data) {
     );
   }
 
-  // Validate books
   if (Array.isArray(data.books)) {
     sanitized.books = data.books.filter(book => 
       book && typeof book === 'object' && 
@@ -110,9 +99,6 @@ function validateAndSanitizeData(data) {
 }
 
 function saveData(state) {
-  console.log('💾 [DEBUG SAVE] saveData called with state keys:', Object.keys(state));
-  console.log('💾 [DEBUG SAVE] chatHistory length in state:', state.chatHistory?.length || 'undefined');
-  
   try {
     const toStore = {
       contacts: state.contacts,
@@ -121,62 +107,34 @@ function saveData(state) {
       conversations: state.conversations,
       books: state.books
     };
-    
-    console.log('💾 [DEBUG SAVE] Data to store:', {
-      contacts: toStore.contacts?.length || 'undefined',
-      events: toStore.events?.length || 'undefined', 
-      chatHistory: toStore.chatHistory?.length || 'undefined',
-      conversations: toStore.conversations?.length || 'undefined',
-      books: toStore.books?.length || 'undefined'
-    });
-    
-    const stringified = JSON.stringify(toStore);
-    console.log('💾 [DEBUG SAVE] Stringified data length:', stringified.length);
-    
-    localStorage.setItem(STORAGE_KEY, stringified);
-    console.log('💾 [DEBUG SAVE] Data written to localStorage');
-    
-    // Verify the save was successful
-    const verification = localStorage.getItem(STORAGE_KEY);
-    if (!verification) {
-      throw new Error('LocalStorage save verification failed');
-    }
-    console.log('💾 [DEBUG SAVE] Save verification successful, retrieved length:', verification.length);
-    
-    // Parse and verify the content
-    const parsed = JSON.parse(verification);
-    console.log('💾 [DEBUG SAVE] Verified parsed chatHistory length:', parsed.chatHistory?.length || 'undefined');
-    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   } catch (e) {
-    console.error('💾 [DEBUG SAVE] Failed to save data to localStorage:', e);
-    
-    // Attempt to clear corrupted data and retry once
+    console.error('Failed to save data to localStorage:', e);
     if (e.name === 'QuotaExceededError' || e.message.includes('storage')) {
-      console.warn('💾 [DEBUG SAVE] Storage quota exceeded, attempting to clear old data...');
       try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           contacts: state.contacts || [],
           events: state.events || [],
-          chatHistory: (state.chatHistory || []).slice(-50), // Keep only last 50 messages
+          chatHistory: (state.chatHistory || []).slice(-50),
           conversations: state.conversations || [],
           books: state.books || []
         }));
-        console.log('💾 [DEBUG SAVE] Retry save successful after cleanup');
       } catch (retryError) {
-        console.error('💾 [DEBUG SAVE] Failed to save data even after cleanup:', retryError);
+        console.error('Failed to save data even after cleanup:', retryError);
       }
     }
   }
 }
 
 // ── Netlify Blob Sync ──
-// Syncing to blobs ensures data survives browser cache clears.
-// Local storage is fast + local; blobs are durable + cross-device.
+// Uses last-write-wins debounce: each sync request records a timestamp.
+// When sync completes, if a newer request was made, re-runs with latest state.
+// This prevents data loss during burst activity (e.g. Spring creating 5 events).
 
-let _blobSyncPending = false;
+let _syncSeq = 0;
+let _syncInFlight = false;
 
-/** Send one slice of data to the blob store */
 async function syncSliceToBlobs(key, data) {
   try {
     const response = await apiFetch(API.dataSave, {
@@ -187,26 +145,42 @@ async function syncSliceToBlobs(key, data) {
     if (!response.ok) throw new Error(`Blob save ${key}: ${response.status}`);
     return true;
   } catch (e) {
-    console.warn(`⚠️ Blob sync failed for "${key}":`, e.message);
+    console.warn(`Blob sync failed for "${key}":`, e.message);
     return false;
   }
 }
 
-/** Fire-and-forget sync for all data slices */
 function syncToBlobs(state) {
-  if (_blobSyncPending) return; // skip if a sync is still in-flight
-  _blobSyncPending = true;
-  Promise.all(
-    BLOB_KEYS.map((key) => {
-      const data = state[key];
-      if (!data || !Array.isArray(data)) return Promise.resolve(false);
-      return syncSliceToBlobs(key, data);
-    })
-  ).then(() => {
-    _blobSyncPending = false;
-  }).catch(() => {
-    _blobSyncPending = false;
-  });
+  const mySeq = ++_syncSeq;
+  
+  const runSync = (s) => {
+    _syncInFlight = true;
+    Promise.all(
+      BLOB_KEYS.map((key) => {
+        const data = s[key];
+        if (!data || !Array.isArray(data)) return Promise.resolve(false);
+        return syncSliceToBlobs(key, data);
+      })
+    ).then(() => {
+      // If a newer request was queued while we were in-flight, re-run with latest state
+      if (mySeq < _syncSeq) {
+        // A newer sync was requested — fetch latest state from the Zustand store
+        // (import inline to avoid circular deps)
+        const { useStore } = require('./useStore');
+        runSync(useStore.getState());
+      } else {
+        _syncInFlight = false;
+      }
+    }).catch(() => {
+      _syncInFlight = false;
+    });
+  };
+  
+  // If nothing is in flight, start immediately. Otherwise seq tracking ensures
+  // the in-flight sync will pick up our state when it finishes.
+  if (!_syncInFlight) {
+    runSync(state);
+  }
 }
 
 /** Load ALL data from blob store, returns object or null */
@@ -231,7 +205,7 @@ async function tryLoadFromBlobs() {
     }
     return hasAnyData ? result : null;
   } catch (e) {
-    console.warn('⚠️ Failed to load from blobs:', e.message);
+    console.warn('Failed to load from blobs:', e.message);
     return null;
   }
 }
@@ -246,7 +220,6 @@ function getStartOfWeek(date) {
   return d;
 }
 
-// Helper: get start of month for a given date
 function getStartOfMonth(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -254,7 +227,6 @@ function getStartOfMonth(date) {
   return d;
 }
 
-// Helper: get start of year for a given date
 function getStartOfYear(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -272,7 +244,7 @@ export const useStore = create((set, get) => ({
   activeConversationId: null,
   _restoredFromServer: false,
 
-  // ── Blob restore: try to load fresher data from server ──
+  // ── Blob restore: merge server data using timestamps ──
   restoreFromBlobs: async () => {
     const state = get();
     if (state._restoredFromServer) return;
@@ -282,14 +254,31 @@ export const useStore = create((set, get) => ({
       const merged = { ...current, _restoredFromServer: true };
       for (const key of BLOB_KEYS) {
         if (blobData[key] && blobData[key].length > 0) {
-          // Only overwrite if blob has more data than what we have locally
           const currentArr = current[key] || [];
-          if (blobData[key].length > currentArr.length) {
+          
+          // Validate chatHistory format: skip if blob data has 'content' without 'message'
+          // (corrupted by old Spring memory key collision)
+          if (key === 'chatHistory') {
+            const hasCorruptedFormat = blobData[key].some(m => m.content && !m.message);
+            if (hasCorruptedFormat) continue;
+          }
+          
+          // Merge by timestamp: for items with createdAt, keep newest.
+          // For items without timestamps (legacy), prefer blob data by count.
+          // Only overwrite if blob data is meaningfully different.
+          const localIds = new Set(currentArr.map(item => item.id).filter(Boolean));
+          const blobOnlyNew = blobData[key].filter(item => !item.id || !localIds.has(item.id));
+          
+          if (blobOnlyNew.length > 0) {
+            // Add blob-only items that don't exist locally
+            merged[key] = [...currentArr, ...blobOnlyNew];
+          } else if (blobData[key].length > currentArr.length) {
+            // More items on server, use server copy
             merged[key] = blobData[key];
           }
+          // else: local is same or has more items, keep local
         }
       }
-      // Re-save to localStorage so local cache is current
       saveData(merged);
       return merged;
     });
@@ -308,7 +297,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, contacts });
       return { contacts };
     });
-    syncToBlobs({ ...get(), contacts: [...get().contacts, newContact] });
+    syncToBlobs(get());
     return newContact;
   },
 
@@ -350,7 +339,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, events });
       return { events };
     });
-    syncToBlobs({ ...get(), events: [...get().events, newEvent] });
+    syncToBlobs(get());
     return newEvent;
   },
 
@@ -376,8 +365,6 @@ export const useStore = create((set, get) => ({
 
   // --- Chat Actions ---
   addChatMessage: (message) => {
-    console.log('🏪 [DEBUG STORE] addChatMessage called with:', message);
-    
     try {
       const newMsg = {
         ...message,
@@ -385,38 +372,22 @@ export const useStore = create((set, get) => ({
         timestamp: new Date().toISOString()
       };
       
-      console.log('🏪 [DEBUG STORE] Created new message object:', newMsg);
-      
       set((state) => {
-        console.log('🏪 [DEBUG STORE] Current state chatHistory length:', state.chatHistory?.length || 'undefined');
-        console.log('🏪 [DEBUG STORE] Last few messages before add:', state.chatHistory?.slice(-2) || 'undefined');
-        
         const chatHistory = [...state.chatHistory, newMsg];
-        console.log('🏪 [DEBUG STORE] New chatHistory length:', chatHistory.length);
-        
         // Prevent infinite growth - keep last 500 messages
         const trimmedHistory = chatHistory.length > 500 
           ? chatHistory.slice(-500) 
           : chatHistory;
           
-        console.log('🏪 [DEBUG STORE] Trimmed history length:', trimmedHistory.length);
-        console.log('🏪 [DEBUG STORE] Last few messages after add:', trimmedHistory.slice(-3));
-          
         const newState = { ...state, chatHistory: trimmedHistory };
-        
-        console.log('🏪 [DEBUG STORE] About to save data to localStorage');
         saveData(newState);
-        console.log('🏪 [DEBUG STORE] Data saved to localStorage');
-        
         return { chatHistory: trimmedHistory };
       });
       
-      console.log('🏪 [DEBUG STORE] Returning new message:', newMsg);
       syncToBlobs(get());
       return newMsg;
     } catch (error) {
-      console.error('🏪 [DEBUG STORE] Failed to add chat message:', error);
-      // Return a minimal message to prevent UI crashes
+      console.error('Failed to add chat message:', error);
       return {
         id: uuidv4(),
         role: message.role || 'system',
@@ -439,7 +410,7 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // --- Conversation Actions (for persistent threads) ---
+  // --- Conversation Actions ---
   createConversation: (title) => {
     const conv = {
       id: uuidv4(),
@@ -473,7 +444,7 @@ export const useStore = create((set, get) => ({
       saveData({ ...state, books });
       return { books };
     });
-    syncToBlobs({ ...get(), books: [...get().books, newBook] });
+    syncToBlobs(get());
     return newBook;
   },
 
@@ -513,7 +484,7 @@ export const useStore = create((set, get) => ({
     };
   },
 
-  // Reset all data — clears everything
+  // Reset all data
   resetAllData: () => {
     const data = {
       contacts: [],

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 const COMPASS_API_URL = import.meta.env.VITE_COMPASS_API_URL || 'https://replaybrick.com';
-const API_KEY = import.meta.env.VITE_COMPASS_API_KEY || 'spring-vicki-2026';
+const API_KEY = import.meta.env.VITE_COMPASS_API_KEY || '';
 
 // Map data keys to human labels and icons
 const DATA_TYPE_META = {

@@ -2,7 +2,7 @@
 // Natural conversation with Spring (DeepSeek AI)
 // Supports image upload for processing
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Send,
   User,
@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { API, API_BASE, API_KEY, apiFetch } from '../api';
+import { API, API_BASE, apiFetch } from '../api';
 import { buildImageDocText } from '../utils/imageUploadText';
 import { parseSpringActions } from '../utils/springActions';
 
@@ -36,6 +36,28 @@ function normalizeEventType(type) {
   return typeColors[type] ? type : 'custom';
 }
 
+// Safe markdown-to-HTML: only allows <strong>, <em>, <br>, • via regex
+// Escapes everything else to prevent XSS via dangerouslySetInnerHTML
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatMessage(text) {
+  // First escape all HTML to prevent XSS
+  let formatted = escapeHtml(text);
+  // Then apply safe markdown transformations on the escaped text
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  formatted = formatted.replace(/^- (.*)/gm, '<br/>• $1');
+  formatted = formatted.replace(/\n/g, '<br/>');
+  return formatted;
+}
+
 // Suggested prompts for Amanda
 const suggestedPrompts = [
   "What activities work well for late-stage Alzheimer's residents?",
@@ -47,7 +69,17 @@ const suggestedPrompts = [
 const AI_API_ENDPOINT = API.chat;
 
 export default function ChatPage() {
-  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact, deleteEvent, updateEvent, events } = useStore();  const [input, setInput] = useState('');
+  const chatHistory = useStore(state => state.chatHistory);
+  const events = useStore(state => state.events);
+  const addChatMessage = useStore(state => state.addChatMessage);
+  const clearChatHistory = useStore(state => state.clearChatHistory);
+  const addEvent = useStore(state => state.addEvent);
+  const addBook = useStore(state => state.addBook);
+  const addContact = useStore(state => state.addContact);
+  const deleteEvent = useStore(state => state.deleteEvent);
+  const updateEvent = useStore(state => state.updateEvent);
+  
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -65,31 +97,24 @@ export default function ChatPage() {
     chatHistoryRef.current = chatHistory;
   }, [chatHistory]);
 
-  // Auto-scroll to bottom with cleanup
+  // Auto-scroll to bottom
   useEffect(() => {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
-    
-    // Small delay to ensure messages are rendered
     const timeoutId = setTimeout(scrollToBottom, 100);
-    
     return () => clearTimeout(timeoutId);
   }, [chatHistory]);
 
-  // Focus input on mount with cleanup
+  // Focus input on mount
   useEffect(() => {
     let mounted = true;
-    
     const focusInput = () => {
       if (mounted && inputRef.current) {
         inputRef.current.focus();
       }
     };
-    
-    // Small delay to ensure component is fully mounted
     const timeoutId = setTimeout(focusInput, 100);
-    
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
@@ -101,13 +126,11 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       alert('File is too large. Please choose a file under 10MB.');
       return;
     }
 
-    // Check if it's an image
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -118,14 +141,12 @@ export default function ChatPage() {
       };
       reader.readAsDataURL(file);
     } else {
-      // It's a document - show filename
       setSelectedFile(file);
       setFilePreviewName(file.name);
       setSelectedImage(null);
       setImagePreview(null);
     }
 
-    // Reset file input so user can re-select the same file
     e.target.value = '';
   };
 
@@ -147,28 +168,130 @@ export default function ChatPage() {
     }
   };
 
-  // Send message handler — calls DeepSeek via backend proxy
-  const handleSend = async () => {
-    console.log('🚀 [DEBUG] handleSend called');
-    
-    const message = input.trim();
-    if ((!message && !selectedImage && !selectedFile) || loading || fileUploading) {
-      console.log('❌ [DEBUG] handleSend aborted - empty message or already loading');
-      return;
-    }
+  // Shared Spring response processor — handles all block types
+  const processSpringResponse = useCallback((responseText, currentEvents) => {
+    const parsedActions = parseSpringActions(responseText);
+    const displayText = parsedActions.displayText || "Done. I handled that for you.";
 
-    // Store references to avoid stale closures
-    const currentChatHistory = chatHistory;
+    // Add the main response text to chat
+    addChatMessage({ role: 'assistant', message: displayText });
+
+    // Process events
+    parsedActions.events.forEach((parsedEvent) => {
+      const eventType = normalizeEventType(parsedEvent.type);
+      const eventToAdd = {
+        title: parsedEvent.title || 'Activity',
+        start: new Date(parsedEvent.start).toISOString(),
+        end: new Date(parsedEvent.end).toISOString(),
+        type: eventType,
+        description: parsedEvent.description || '',
+        wing: parsedEvent.wing || 'both',
+        residents: parsedEvent.residents || [],
+        color: getTypeColor(eventType),
+      };
+      
+      addEvent(eventToAdd);
+      const wingLabel = eventToAdd.wing === 'memory' ? 'Memory Care' : eventToAdd.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
+      addChatMessage({
+        role: 'assistant',
+        message: `✅ **Added to calendar!** "${eventToAdd.title}" has been scheduled for ${new Date(parsedEvent.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(parsedEvent.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} on the **${wingLabel}** calendar. Check your calendar to see it! 📅`
+      });
+    });
+
+    // Process books
+    parsedActions.books.forEach((parsedBook) => {
+      const bookToAdd = {
+        title: parsedBook.title || 'Untitled',
+        author: parsedBook.author || 'Unknown',
+        pages: parsedBook.pages || 0,
+        dateRead: new Date().toISOString(),
+        addedBy: 'Spring'
+      };
+      addBook(bookToAdd);
+      addChatMessage({
+        role: 'assistant',
+        message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}. Check your Books page to see your reading stats! 📚`
+      });
+    });
+
+    // Process contacts
+    parsedActions.contacts.filter(contact => contact && contact.name).forEach((parsedContact) => {
+      const contactToAdd = {
+        name: parsedContact.name,
+        phone: parsedContact.phone || '',
+        email: parsedContact.email || '',
+        relationship: parsedContact.relationship || 'other',
+        company: parsedContact.company || '',
+        title: parsedContact.title || '',
+        notes: parsedContact.notes || '',
+        tags: parsedContact.tags || [],
+      };
+      addContact(contactToAdd);
+      addChatMessage({
+        role: 'assistant',
+        message: `✅ **Saved contact!** "${parsedContact.name}"${parsedContact.company ? ` from ${parsedContact.company}` : ''} has been added to your Contacts. Check your Contacts page! 📇`
+      });
+    });
+
+    // Process deletes — use live events from store, not render-time snapshot
+    parsedActions.deletes.forEach((del) => {
+      const delTitle = (del.title || '').trim().toLowerCase();
+      const delStart = del.start ? new Date(del.start).getTime() : null;
+      const delWing = (del.wing || '').trim().toLowerCase();
+
+      // Use currentEvents (latest) for matching, not a stale closure
+      const matched = currentEvents.filter(e => {
+        const titleMatch = (e.title || '').trim().toLowerCase() === delTitle;
+        if (!titleMatch || !delStart) return false;
+        const eventStart = new Date(e.start).getTime();
+        const withinTime = Math.abs(eventStart - delStart) < 300000; // 5 min tolerance
+        if (!withinTime) return false;
+        if (!delWing) return true;
+        const eventWing = (e.wing || '').toLowerCase();
+        return eventWing === delWing || eventWing === 'both';
+      });
+
+      matched.forEach(e => {
+        const eventWing = (e.wing || '').toLowerCase();
+        if (eventWing === 'both' && delWing) {
+          const newWing = delWing === 'memory' ? 'assisted' : 'memory';
+          updateEvent(e.id, { wing: newWing });
+          const newLabel = newWing === 'memory' ? 'Memory Care' : 'Assisted Living';
+          const removedLabel = delWing === 'memory' ? 'Memory Care' : 'Assisted Living';
+          addChatMessage({
+            role: 'assistant',
+            message: `🔄 **Updated!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} moved from **${removedLabel}** to **${newLabel}** only.`
+          });
+        } else {
+          deleteEvent(e.id);
+          const wingLabel = eventWing === 'memory' ? 'Memory Care' : eventWing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
+          addChatMessage({
+            role: 'assistant',
+            message: `🗑️ **Deleted!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} has been removed from the **${wingLabel}** calendar.`
+          });
+        }
+      });
+
+      if (matched.length === 0 && delTitle) {
+        addChatMessage({
+          role: 'assistant',
+          message: `⚠️ I tried to delete "${del.title}" but couldn't find a matching event on the calendar. It may already be removed — check your calendar to confirm.`
+        });
+      }
+    });
+  }, [addChatMessage, addEvent, addBook, addContact, deleteEvent, updateEvent]);
+
+  // Send message handler
+  const handleSend = async () => {
+    const message = input.trim();
+    if ((!message && !selectedImage && !selectedFile) || loading || fileUploading) return;
+
     const currentSelectedImage = selectedImage;
     const currentSelectedFile = selectedFile;
-
-    console.log('📝 [DEBUG] Current chat history length:', currentChatHistory.length);
-    console.log('📝 [DEBUG] User message:', message);
 
     setInput('');
     setShowSuggestions(false);
 
-    // Build user message text
     let userMessageText = message;
     if (!message && currentSelectedImage) {
       userMessageText = "I've shared an image — can you help me with this?";
@@ -176,122 +299,54 @@ export default function ChatPage() {
       userMessageText = `I've shared a file: ${currentSelectedFile.name} — can you help me with this?`;
     }
 
-    // Add user message to chat first
     const userMessage = { role: 'user', message: userMessageText };
-    console.log('➕ [DEBUG] Adding user message to store:', userMessage);
-    
-    const addedUserMsg = addChatMessage(userMessage);
-    console.log('✅ [DEBUG] User message added, returned:', addedUserMsg);
-    console.log('📊 [DEBUG] Chat history length after user message:', chatHistory?.length || 'undefined');
-
+    addChatMessage(userMessage);
     setLoading(true);
 
     try {
       let docText = null;
       let fileName = null;
 
-      // If it's a document, upload to /api/read-file first
       if (currentSelectedFile) {
         setFileUploading(true);
         const formData = new FormData();
         formData.append('file', currentSelectedFile);
 
         try {
-          // Add explicit debugging and error handling for file uploads
-          const uploadUrl = `${API_BASE}/api/read-file`;
-          console.log('🔍 FILE UPLOAD ATTEMPT:', {
-            url: uploadUrl,
-            apiBase: API_BASE,
-            fileSize: currentSelectedFile.size,
-            fileName: currentSelectedFile.name
-          });
-
-          const uploadRes = await apiFetch(uploadUrl, {
+          const uploadRes = await apiFetch(`${API_BASE}/api/read-file`, {
             method: 'POST',
             body: formData
           });
 
-          console.log('📡 FILE UPLOAD RESPONSE:', {
-            status: uploadRes.status,
-            statusText: uploadRes.statusText,
-            url: uploadRes.url,
-            ok: uploadRes.ok
-          });
-
           if (!uploadRes.ok) {
-            // Get the actual error response
-            const errorText = await uploadRes.text();
-            console.error('❌ FILE UPLOAD ERROR RESPONSE:', errorText);
-            
-            // If we get the "computer offline" message, show helpful error
-            if (errorText.includes('computer is turned off') || errorText.includes('offline')) {
-              throw new Error('File upload routing error: Request intercepted by old proxy. Contact support to fix DNS/CDN routing.');
-            }
-            
-            throw new Error(`File upload failed: ${uploadRes.status} - ${errorText}`);
+            throw new Error(`File upload failed: ${uploadRes.status}`);
           }
 
           const fileData = await uploadRes.json();
-          console.log('✅ FILE UPLOAD SUCCESS:', {
-            textLength: fileData.text?.length || 0,
-            fileName: fileData.fileName
-          });
-          
           docText = fileData.text;
           fileName = fileData.fileName;
         } catch (fileError) {
           console.error('File upload error:', fileError);
-          
-          // If we got the routing error, try direct Netlify API call as backup
-          if (fileError.message.includes('routing error') || fileError.message.includes('offline')) {
-            console.log('🔄 TRYING BACKUP DIRECT NETLIFY CALL...');
-            try {
-              // Direct call to Netlify backend bypassing any potential proxy
-              const backupRes = await fetch('https://replaybrick.com/api/read-file', {
-                method: 'POST',
-                headers: {
-                  ...(API_KEY ? { 'x-api-key': API_KEY } : {})
-                },
-                body: formData
-              });
-              
-              if (backupRes.ok) {
-                const fileData = await backupRes.json();
-                console.log('✅ BACKUP CALL SUCCESS!');
-                docText = fileData.text;
-                fileName = fileData.fileName;
-              } else {
-                throw fileError; // Use original error
-              }
-            } catch (backupError) {
-              console.error('❌ BACKUP CALL ALSO FAILED:', backupError);
-              throw fileError; // Use original error
-            }
-          } else {
-            addChatMessage({
-              role: 'assistant',
-              message: "I had trouble reading that file. Please try uploading it again or try a different format."
-            });
-            throw fileError;
-          }
+          addChatMessage({
+            role: 'assistant',
+            message: "I had trouble reading that file. Please try uploading it again or try a different format."
+          });
+          throw fileError;
         } finally {
           setFileUploading(false);
           removeFile();
         }
       }
 
-      // Images are OCR'd in-browser and sent as text because DeepSeek's
-      // production chat API accepts text messages, not image_url parts.
-      if (selectedImage) {
+      if (currentSelectedImage) {
         setFileUploading(true);
-        const ocrText = await extractImageText(selectedImage);
-        docText = buildImageDocText(selectedImage.name, ocrText);
-        fileName = selectedImage.name;
+        const ocrText = await extractImageText(currentSelectedImage);
+        docText = buildImageDocText(currentSelectedImage.name, ocrText);
+        fileName = currentSelectedImage.name;
         setFileUploading(false);
         removeFile();
       }
 
-      // Send to backend API
       const body = {
         message: userMessageText,
         history: chatHistoryRef.current.slice(-20).map(m => ({
@@ -300,12 +355,6 @@ export default function ChatPage() {
         }))
       };
 
-      console.log('🌐 [DEBUG] API request body prepared:', {
-        message: body.message,
-        historyLength: body.history.length
-      });
-
-      // Add document text if present
       if (docText) {
         body.docText = docText;
         body.fileName = fileName;
@@ -323,134 +372,11 @@ export default function ChatPage() {
       }
 
       const data = await res.json();
+      const responseText = data.response || '';
 
-      let responseText = data.response || '';
-        console.log('📋 [DEBUG] Raw API response data:', data);
-        
-        console.log('📋 [DEBUG] Extracted response text:', responseText);
-        console.log('📋 [DEBUG] Response text length:', responseText.length);
-        console.log('📋 [DEBUG] Response text trimmed length:', responseText.trim().length);
-
-      const parsedActions = parseSpringActions(responseText);
-      responseText = parsedActions.displayText || "Done. I handled that for you.";
-
-      // Add the main response text to the chat
-      addChatMessage({
-        role: 'assistant',
-        message: responseText
-      });
-
-      // If Spring created calendar events, add them
-      parsedActions.events.forEach((parsedEvent) => {
-        const eventType = normalizeEventType(parsedEvent.type);
-        const eventToAdd = {
-          title: parsedEvent.title || 'Activity',
-          start: new Date(parsedEvent.start).toISOString(),
-          end: new Date(parsedEvent.end).toISOString(),
-          type: eventType,
-          description: parsedEvent.description || '',
-          wing: parsedEvent.wing || 'both',
-          residents: parsedEvent.residents || [],
-          color: getTypeColor(eventType),
-        };
-        
-        addEvent(eventToAdd);
-        const wingLabel = eventToAdd.wing === 'memory' ? 'Memory Care' : eventToAdd.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
-        addChatMessage({
-          role: 'assistant',
-          message: `✅ **Added to calendar!** "${eventToAdd.title}" has been scheduled for ${new Date(parsedEvent.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(parsedEvent.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} on the **${wingLabel}** calendar. Check your calendar to see it! 📅`
-        });
-      });
-
-      // If Spring added books, add them
-      parsedActions.books.forEach((parsedBook) => {
-        const bookToAdd = {
-          title: parsedBook.title || 'Untitled',
-          author: parsedBook.author || 'Unknown',
-          pages: parsedBook.pages || 0,
-          dateRead: new Date().toISOString(),
-          addedBy: 'Spring'
-        };
-        
-        addBook(bookToAdd);
-        
-        addChatMessage({
-          role: 'assistant',
-          message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}. Check your Books page to see your reading stats! 📚`
-        });
-      });
-
-      // If Spring extracted contacts, add them
-      parsedActions.contacts.filter(contact => contact && contact.name).forEach((parsedContact) => {
-        const contactToAdd = {
-          name: parsedContact.name,
-          phone: parsedContact.phone || '',
-          email: parsedContact.email || '',
-          relationship: parsedContact.relationship || 'other',
-          company: parsedContact.company || '',
-          title: parsedContact.title || '',
-          notes: parsedContact.notes || '',
-          tags: parsedContact.tags || [],
-        };
-        
-        addContact(contactToAdd);
-        
-        addChatMessage({
-          role: 'assistant',
-          message: `✅ **Saved contact!** "${parsedContact.name}"${parsedContact.company ? ` from ${parsedContact.company}` : ''} has been added to your Contacts. Check your Contacts page! 📇`
-        });
-      });
-
-      // If Spring wants to delete events, match and remove them
-      parsedActions.deletes.forEach((del) => {
-        const delTitle = (del.title || '').trim().toLowerCase();
-        const delStart = del.start ? new Date(del.start).getTime() : null;
-        const delWing = (del.wing || '').trim().toLowerCase();
-
-        // Match by title + start time (2-min tolerance).
-        // Wing matching: 'memory' matches events with wing='memory' OR 'both'
-        //               'assisted' matches events with wing='assisted' OR 'both'
-        const matched = events.filter(e => {
-          const titleMatch = (e.title || '').trim().toLowerCase() === delTitle;
-          if (!titleMatch || !delStart) return false;
-          const eventStart = new Date(e.start).getTime();
-          const withinTime = Math.abs(eventStart - delStart) < 300000; // 5 min
-          if (!withinTime) return false;
-          if (!delWing) return true; // no wing filter — match any
-          const eventWing = (e.wing || '').toLowerCase();
-          // Match exact wing OR 'both' (appears on both calendars)
-          return eventWing === delWing || eventWing === 'both';
-        });
-
-        matched.forEach(e => {
-          const eventWing = (e.wing || '').toLowerCase();
-          // If event is on BOTH calendars, move it to the OTHER calendar instead of deleting
-          if (eventWing === 'both' && delWing) {
-            const newWing = delWing === 'memory' ? 'assisted' : 'memory';
-            updateEvent(e.id, { wing: newWing });
-            const newLabel = newWing === 'memory' ? 'Memory Care' : 'Assisted Living';
-            const removedLabel = delWing === 'memory' ? 'Memory Care' : 'Assisted Living';
-            addChatMessage({
-              role: 'assistant',
-              message: `🔄 **Updated!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} moved from **${removedLabel}** to **${newLabel}** only.`
-            });
-          } else {
-            deleteEvent(e.id);
-            const wingLabel = eventWing === 'memory' ? 'Memory Care' : eventWing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
-            addChatMessage({
-              role: 'assistant',
-              message: `🗑️ **Deleted!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} has been removed from the **${wingLabel}** calendar.`
-            });
-          }
-        });
-
-        if (matched.length === 0 && delTitle) {
-          addChatMessage({
-            role: 'assistant',
-            message: `⚠️ I tried to delete "${del.title}" but couldn't find a matching event on the calendar. It may already be removed — check your calendar to confirm.`
-          });
-        }
-      });
+      // Get latest events from store for accurate delete matching
+      const latestEvents = useStore.getState().events;
+      processSpringResponse(responseText, latestEvents);
     } catch (err) {
       console.error('Spring API error:', err);
       const isTimeout = err.message && err.message.includes('timed out');
@@ -461,7 +387,8 @@ export default function ChatPage() {
           : "I'm having trouble connecting right now. This is usually temporary — please try again in a few seconds. If it keeps happening, check your internet connection."
       });
     } finally {
-      setLoading(false);    }
+      setLoading(false);
+    }
   };
 
   // Handle Enter key
@@ -472,27 +399,16 @@ export default function ChatPage() {
     }
   };
 
-  // Handle suggestion click - fixed race condition
+  // Handle suggestion click
   const handleSuggestion = (prompt) => {
-    console.log('🎯 [DEBUG] handleSuggestion called with:', prompt);
+    if (loading) return;
     
-    if (loading) {
-      console.log('❌ [DEBUG] handleSuggestion aborted - already loading');
-      return; // Prevent multiple simultaneous requests
-    }
-    
-    setInput(''); // Clear input immediately 
+    setInput('');
     setShowSuggestions(false);
     
-    // Add user message immediately
-    console.log('➕ [DEBUG] Adding suggestion user message to store');
     const addedMsg = addChatMessage({ role: 'user', message: prompt });
-    console.log('✅ [DEBUG] Suggestion user message added:', addedMsg);
-    
     setLoading(true);
 
-    // Send to backend with proper error handling
-    console.log('📡 [DEBUG] Sending suggestion request to API');
     apiFetch(AI_API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -505,23 +421,16 @@ export default function ChatPage() {
       })
     })
       .then(async (res) => {
-        console.log('📡 [DEBUG] Suggestion API response status:', res.status);
-        if (!res.ok) {
-          throw new Error(`API Error: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`API Error: ${res.status}`);
         return await res.json();
       })
       .then(data => {
-        console.log('📋 [DEBUG] Suggestion API response data:', data);
         const responseText = data.response || "I'm here to help!";
-        console.log('📋 [DEBUG] Suggestion response text:', responseText);
-        
-        console.log('➕ [DEBUG] Adding suggestion AI response to store');
-        const addedAiMsg = addChatMessage({ role: 'assistant', message: responseText });
-        console.log('✅ [DEBUG] Suggestion AI response added:', addedAiMsg);
+        const latestEvents = useStore.getState().events;
+        processSpringResponse(responseText, latestEvents);
       })
       .catch((err) => {
-        console.warn('❌ [DEBUG] Suggestion API error:', err);
+        console.warn('Suggestion API error:', err);
         addChatMessage({
           role: 'assistant',
           message: "I'm having trouble connecting right now. Give me a moment and try again! 🌸"
@@ -529,25 +438,62 @@ export default function ChatPage() {
       })
       .finally(() => {
         setLoading(false);
-        console.log('🏁 [DEBUG] handleSuggestion completed');
       });
   };
 
   // Clear conversation
   const handleClear = () => {
-    if (chatHistory.length > 1 && !window.confirm('Clear the conversation history?')) return;
+    if (chatHistory.length === 0) return;
+    if (!window.confirm('Clear the conversation history?')) return;
     clearChatHistory();
     setShowSuggestions(true);
   };
 
-  // Format message text (simple markdown-like)
-  const formatMessage = (text) => {
-    let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    formatted = formatted.replace(/^- (.*)/gm, '<br/>• $1');
-    formatted = formatted.replace(/\n/g, '<br/>');
-    return formatted;
-  };
+  // Memoize chat messages to avoid re-rendering entire history
+  const chatMessages = useMemo(() => chatHistory.map((msg, i) => (
+    <div
+      key={msg.id}
+      className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+    >
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+          msg.role === 'assistant'
+            ? 'bg-purple-500/20 text-purple-300'
+            : 'bg-teal-500/20 text-teal-300'
+        }`}
+      >
+        {msg.role === 'assistant' ? (
+          <Sparkles size={16} />
+        ) : (
+          <User size={16} />
+        )}
+      </div>
+
+      <div
+        className={`message-bubble px-5 py-3.5 rounded-2xl shadow-md ${
+          msg.role === 'user'
+            ? 'bg-violet-50 text-gray-800 rounded-tr-md'
+            : 'bg-violet-50/50 text-gray-800 rounded-tl-md'
+        }`}
+      >
+        <p
+          className="text-base leading-relaxed whitespace-pre-wrap"
+          dangerouslySetInnerHTML={{ __html: formatMessage(msg.message || msg.content || '') }}
+        />
+
+        <p
+          className={`text-xs mt-1.5 ${
+            msg.role === 'user' ? 'text-purple-600/70' : 'text-purple-700/50'
+          }`}
+        >
+          {new Date(msg.timestamp).toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit'
+          })}
+        </p>
+      </div>
+    </div>
+  )), [chatHistory]);
 
   return (
     <div className="h-[calc(100vh-5rem)] flex flex-col max-w-3xl mx-auto p-4 sm:p-6">
@@ -575,44 +521,25 @@ export default function ChatPage() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
-        {(() => {
-          console.log('🖥️ [DEBUG UI] Rendering messages area');
-          console.log('🖥️ [DEBUG UI] chatHistory:', chatHistory);
-          console.log('🖥️ [DEBUG UI] chatHistory.length:', chatHistory.length);
-          console.log('🖥️ [DEBUG UI] chatHistory type:', typeof chatHistory);
-          console.log('🖥️ [DEBUG UI] chatHistory is array:', Array.isArray(chatHistory));
-          
-          if (chatHistory.length > 0) {
-            console.log('🖥️ [DEBUG UI] Last few messages:', chatHistory.slice(-3));
-          }
-          
-          return null; // This is just for debugging, doesn't render anything
-        })()}
-        
         {chatHistory.length === 0 ? (
           /* Welcome state with suggestions */
           <div className="flex flex-col items-center justify-center h-full text-center p-6">
             <div className="w-20 h-20 rounded-full bg-[#1e1e3a] border-2 border-purple-300/30 flex items-center justify-center shadow-md mb-4 overflow-hidden">
               <svg viewBox="0 0 100 100" className="w-16 h-16">
-                {/* Axolotl face - cute smile */}
-                <circle cx="50" cy="50" r="45" fill="url(#axolotl-grad)" />
+                <circle cx="50" cy="50" r="45" fill="url(#axolotl-grad-chat)" />
                 <defs>
-                  <radialGradient id="axolotl-grad" cx="50%" cy="40%" r="55%">
+                  <radialGradient id="axolotl-grad-chat" cx="50%" cy="40%" r="55%">
                     <stop offset="0%" stopColor="#f5c6d0" />
                     <stop offset="100%" stopColor="#e8a0b8" />
                   </radialGradient>
                 </defs>
-                {/* Eyes */}
                 <circle cx="35" cy="42" r="5" fill="#1a1a2e" />
                 <circle cx="65" cy="42" r="5" fill="#1a1a2e" />
                 <circle cx="36" cy="40" r="2" fill="white" />
                 <circle cx="66" cy="40" r="2" fill="white" />
-                {/* Happy smile */}
                 <path d="M35 58 Q50 70 65 58" stroke="#1a1a2e" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                {/* Cheek blush */}
                 <circle cx="25" cy="52" r="6" fill="#ff9eb5" opacity="0.4" />
                 <circle cx="75" cy="52" r="6" fill="#ff9eb5" opacity="0.4" />
-                {/* Gill tufts (axolotl signature) */}
                 <path d="M12 30 Q5 22 10 15" stroke="#e8a0b8" strokeWidth="3" fill="none" strokeLinecap="round" />
                 <path d="M10 35 Q3 30 8 22" stroke="#e8a0b8" strokeWidth="3" fill="none" strokeLinecap="round" />
                 <path d="M88 30 Q95 22 90 15" stroke="#e8a0b8" strokeWidth="3" fill="none" strokeLinecap="round" />
@@ -642,62 +569,7 @@ export default function ChatPage() {
         ) : (
           /* Chat messages */
           <>
-            {(() => {
-              console.log('🖥️ [DEBUG UI] Rendering chat messages');
-              console.log('🖥️ [DEBUG UI] About to map over chatHistory with length:', chatHistory.length);
-              return null;
-            })()}
-            
-            {chatHistory.map((msg, index) => {
-              console.log('🖥️ [DEBUG UI] Rendering message', index, ':', msg);
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-                >
-                  {/* Avatar */}
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      msg.role === 'assistant'
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : 'bg-teal-500/20 text-teal-300'
-                    }`}
-                  >
-                    {msg.role === 'assistant' ? (
-                      <Sparkles size={16} />
-                    ) : (
-                      <User size={16} />
-                    )}
-                  </div>
-
-                  {/* Message bubble - very light purple */}
-                  <div
-                    className={`message-bubble px-5 py-3.5 rounded-2xl shadow-md ${
-                      msg.role === 'user'
-                        ? 'bg-violet-50 text-gray-800 rounded-tr-md'
-                        : 'bg-violet-50/50 text-gray-800 rounded-tl-md'
-                    }`}
-                  >
-                    <p
-                      className="text-base leading-relaxed whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: formatMessage(msg.message || msg.content || '') }}
-                    />
-
-                    {/* Timestamp */}
-                    <p
-                      className={`text-xs mt-1.5 ${
-                        msg.role === 'user' ? 'text-purple-600/70' : 'text-purple-700/50'
-                      }`}
-                    >
-                      {new Date(msg.timestamp).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            {chatMessages}
 
             {/* Loading indicator */}
             {loading && (
@@ -719,7 +591,7 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* File preview - image or document */}
+      {/* File preview */}
       {imagePreview && (
         <div className="mb-2 relative inline-block">
           <div className="relative rounded-xl overflow-hidden border border-purple-300/30 shadow-md">
@@ -759,7 +631,6 @@ export default function ChatPage() {
       {/* Input area */}
       <div className="bg-dark-card rounded-xl border border-dark-border shadow-md p-2">
         <div className="flex items-end gap-2">
-          {/* File upload button - images + docs */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2.5 text-dark-muted hover:text-purple-400 hover:bg-dark-hover rounded-lg transition-colors flex-shrink-0"
@@ -804,7 +675,6 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* Hint */}
         <div className="px-3 pb-1">
           <p className="text-[10px] text-dark-muted flex items-center gap-1">
             <CornerDownLeft size={10} />
