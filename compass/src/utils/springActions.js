@@ -15,13 +15,14 @@
  */
 export function parseSpringActions(responseText) {
   let displayText = responseText || '';
-  const actions = { events: [], books: [], contacts: [] };
+  const actions = { events: [], books: [], contacts: [], deletes: [] };
 
   // Block patterns — global flag so replace() fires for every match
   const blockPatterns = {
     events: /===EVENT===\n?([\s\S]*?)\n?===END===/g,
     books: /===BOOK===\n?([\s\S]*?)\n?===END===/g,
     contacts: /===CONTACT===\n?([\s\S]*?)\n?===END===/g,
+    deletes: /===DELETE_EVENT===\n?([\s\S]*?)\n?===END===/g,
   };
 
   Object.entries(blockPatterns).forEach(([key, pattern]) => {

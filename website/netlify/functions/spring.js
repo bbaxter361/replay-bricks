@@ -515,6 +515,19 @@ Amanda's Compass app has TWO calendars: Assisted Living and Memory Care. When su
 - For old calendars and planning notes, map recurring activities into concrete dates if Amanda names a target month or asks to populate a new calendar.
 - If a file/link has many events, create all of them. Do not stop at one.
 
+## DELETING EVENTS FROM THE CALENDAR
+When Amanda asks you to delete or remove events from the calendar:
+- Append a ===DELETE_EVENT=== JSON block for EACH event she wants deleted.
+- Include enough detail so the app can find the right event: title and start date/time are the minimum. Include wing if she specifies which calendar.
+- If she asks to delete multiple events (e.g., "remove all Bible Study from Memory Care"), list every matching event individually — one block per event.
+- After emitting delete blocks, confirm what you removed in your message.
+===DELETE_EVENT===
+{"title": "Bible Study", "start": "2026-06-18T10:15:00", "wing": "memory"}
+===END===
+- Use the exact title and date that matches the event in the calendar. If you're not sure, ask Amanda to confirm which one.
+- If Amanda asks to move an event from one calendar to the other, use DELETE_EVENT for the old one and EVENT for the new one.
+- IMPORTANT: You CAN delete events. Previous versions could not, but you now have this capability. Never tell Amanda you can't delete events or that she has to do it manually.
+
 ## BOOK LIST SYSTEM
 Amanda tracks books she has read. Each book has title, author, and page count. She can add books directly or ask you to add them.
 - When adding a book, append an ===BOOK=== JSON block:
@@ -742,7 +755,7 @@ async function fetchUrlContent(url) {
 // ── Conversation Memory ──
 // Stores/retrieves recent conversation context from Netlify Blobs.
 // This gives Spring long-term memory of past chats with Amanda.
-const MEMORY_KEY = 'chatHistory';
+const MEMORY_KEY = 'spring_conversation_memory';
 const MAX_MEMORY_TURNS = 20; // Keep last 20 exchanges
 
 async function getMemoryContext() {

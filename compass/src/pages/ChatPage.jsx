@@ -47,7 +47,7 @@ const suggestedPrompts = [
 const AI_API_ENDPOINT = API.chat;
 
 export default function ChatPage() {
-  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact } = useStore();  const [input, setInput] = useState('');
+  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact, deleteEvent, events } = useStore();  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -247,7 +247,7 @@ export default function ChatPage() {
             console.log('🔄 TRYING BACKUP DIRECT NETLIFY CALL...');
             try {
               // Direct call to Netlify backend bypassing any potential proxy
-              const backupRes = await fetch('https://replaybricksv2.netlify.app/api/read-file', {
+              const backupRes = await fetch('https://replaybrick.com/api/read-file', {
                 method: 'POST',
                 headers: {
                   ...(API_KEY ? { 'x-api-key': API_KEY } : {})
@@ -399,6 +399,41 @@ export default function ChatPage() {
           role: 'assistant',
           message: `✅ **Saved contact!** "${parsedContact.name}"${parsedContact.company ? ` from ${parsedContact.company}` : ''} has been added to your Contacts. Check your Contacts page! 📇`
         });
+      });
+
+      // If Spring wants to delete events, match and remove them
+      parsedActions.deletes.forEach((del) => {
+        const delTitle = (del.title || '').trim().toLowerCase();
+        const delStart = del.start ? new Date(del.start).getTime() : null;
+        const delWing = (del.wing || '').trim().toLowerCase();
+
+        // Match against current events by title + start time (within 2-minute tolerance)
+        const matched = events.filter(e => {
+          const titleMatch = (e.title || '').trim().toLowerCase() === delTitle;
+          if (!titleMatch || !delStart) return false;
+          const eventStart = new Date(e.start).getTime();
+          const withinTime = Math.abs(eventStart - delStart) < 120000; // 2 min
+          if (delWing) {
+            return withinTime && (e.wing || '').toLowerCase() === delWing;
+          }
+          return withinTime;
+        });
+
+        matched.forEach(e => {
+          deleteEvent(e.id);
+          const wingLabel = e.wing === 'memory' ? 'Memory Care' : e.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
+          addChatMessage({
+            role: 'assistant',
+            message: `🗑️ **Deleted!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} has been removed from the **${wingLabel}** calendar.`
+          });
+        });
+
+        if (matched.length === 0 && delTitle) {
+          addChatMessage({
+            role: 'assistant',
+            message: `⚠️ I tried to delete "${del.title}" but couldn't find a matching event on the calendar. It may already be removed — check your calendar to confirm.`
+          });
+        }
       });
     } catch (err) {
       console.error('Spring API error:', err);
@@ -626,7 +661,7 @@ export default function ChatPage() {
                   >
                     <p
                       className="text-base leading-relaxed whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
+                      dangerouslySetInnerHTML={{ __html: formatMessage(msg.message || msg.content || '') }}
                     />
 
                     {/* Timestamp */}
