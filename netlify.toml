@@ -61,6 +61,14 @@
   from = "/hold/*"
   to = "/hold/index.html"
   status = 200
+[[redirects]]
+  from = "/hold"
+  to = "/hold/index.html"
+  status = 200
+[[redirects]]
+  from = "/hold/"
+  to = "/hold/index.html"
+  status = 200
 
 # Main site SPA catch-all (keep LAST)
 [[redirects]]
