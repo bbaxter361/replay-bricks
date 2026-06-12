@@ -453,9 +453,12 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error('Spring API error:', err);
+      const isTimeout = err.message && err.message.includes('timed out');
       addChatMessage({
         role: 'assistant',
-        message: "I'm having trouble connecting right now. Let me try again — give me a moment! 🌸"
+        message: isTimeout
+          ? "Spring is taking longer than usual — it's working on your request but the connection timed out. Your request is still being processed. Try sending a shorter message or try again in a moment."
+          : "I'm having trouble connecting right now. This is usually temporary — please try again in a few seconds. If it keeps happening, check your internet connection."
       });
     } finally {
       setLoading(false);    }

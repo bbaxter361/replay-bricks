@@ -3,7 +3,7 @@
 // All requests include the API key for authentication
 
 // Force direct connection to Netlify backend to avoid any proxy issues
-const API_BASE = 'https://replaybricksv2.netlify.app';
+const API_BASE = 'https://replaybrick.com';
 
 export const API = {
   chat: `${API_BASE}/api/chat`,
@@ -38,6 +38,10 @@ export async function apiFetch(url, options = {}) {
     });
   }
 
+  // Build the fetch options
+  let fetchOptions = { ...options };
+  const timeout = options.timeout || 45000; // 45s default timeout
+
   // For FormData (file uploads): the browser MUST auto-set Content-Type
   // with the multipart boundary. Some browsers strip this when you pass
   // ANY headers object, so send the API key as a query param too as backup.
@@ -45,23 +49,36 @@ export async function apiFetch(url, options = {}) {
     const { 'Content-Type': _, ...safeHeaders } = (options.headers || {});
     const separator = url.includes('?') ? '&' : '?';
     const apiKeyParam = API_KEY ? `${separator}api_key=${API_KEY}` : '';
-    return fetch(`${url}${apiKeyParam}`, {
-      ...options,
+    fetchOptions = {
+      ...fetchOptions,
       headers: {
         ...safeHeaders,
         ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
       },
-    });
+    };
+    url = `${url}${apiKeyParam}`;
+  } else {
+    // For regular (JSON/text) requests, merge headers normally
+    fetchOptions.headers = {
+      ...(options.headers || {}),
+      ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+    };
   }
 
-  // For regular (JSON/text) requests, merge headers normally
-  const headers = {
-    ...(options.headers || {}),
-    ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
-  };
+  // Create AbortController for timeout
+  const controller = new AbortController();
+  fetchOptions.signal = controller.signal;
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
+    return response;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout / 1000}s`);
+    }
+    throw err;
+  }
 }
