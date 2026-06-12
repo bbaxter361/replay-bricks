@@ -58,6 +58,17 @@ function formatMessage(text) {
   return formatted;
 }
 
+// Cached Tesseract worker — create once, reuse across uploads
+let _tesseractWorker = null;
+
+async function getOCRWorker() {
+  if (!_tesseractWorker) {
+    const { createWorker } = await import('tesseract.js');
+    _tesseractWorker = await createWorker('eng');
+  }
+  return _tesseractWorker;
+}
+
 // Suggested prompts for Amanda
 const suggestedPrompts = [
   "What activities work well for late-stage Alzheimer's residents?",
@@ -158,14 +169,9 @@ export default function ChatPage() {
   };
 
   const extractImageText = async (file) => {
-    const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker('eng');
-    try {
-      const { data } = await worker.recognize(file);
-      return data.text || '';
-    } finally {
-      await worker.terminate();
-    }
+    const worker = await getOCRWorker();
+    const { data } = await worker.recognize(file);
+    return data.text || '';
   };
 
   // Shared Spring response processor — handles all block types

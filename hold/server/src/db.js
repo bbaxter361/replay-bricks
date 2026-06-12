@@ -198,13 +198,66 @@ function initSchema(db) {
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(marketplace, state_key)
     );
+    -- App settings (push mode, sync interval, etc.)
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Audit log of every write pushed (or simulated) to a marketplace
+    CREATE TABLE IF NOT EXISTS push_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      marketplace TEXT NOT NULL,          -- 'bricklink', 'brickowl'
+      action TEXT NOT NULL,               -- 'update_qty', 'update_price', 'order_status', 'reconcile_decrement'
+      lot_id TEXT,
+      inventory_id INTEGER,
+      order_ref TEXT,                     -- marketplace order id that triggered it (if any)
+      payload TEXT,                       -- JSON of what we sent (or would send)
+      mode TEXT NOT NULL,                 -- 'dry_run' or 'live'
+      status TEXT NOT NULL,               -- 'simulated', 'success', 'failed'
+      result TEXT,                        -- API response / error message
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
+
+  // Column migrations (ignore if already applied)
+  const migrations = [
+    "ALTER TABLE orders ADD COLUMN reconciled_at TEXT",
+    "ALTER TABLE order_items ADD COLUMN lot_id TEXT",
+    "ALTER TABLE order_items ADD COLUMN remote_lot_id TEXT",
+  ];
+  for (const m of migrations) {
+    try { db.exec(m); } catch { /* already applied */ }
+  }
+
+  // Default settings
+  const defaults = [
+    ['push_mode', 'dry_run'],          // SAFETY: stays dry_run until Bricqer is cancelled
+    ['sync_interval_min', '10'],
+    ['auto_sync_enabled', 'true'],
+    ['backup_keep_days', '14'],
+  ];
+  const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+  for (const [k, v] of defaults) insSetting.run(k, v);
 
   // Seed BL colors if empty
   const count = db.prepare('SELECT COUNT(*) as cnt FROM bl_colors').get();
   if (count.cnt === 0) {
     seedColors(db);
   }
+}
+
+export function getSetting(db, key, fallback = null) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : fallback;
+}
+
+export function setSetting(db, key, value) {
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `).run(key, String(value));
 }
 
 function seedColors(db) {

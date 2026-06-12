@@ -1,38 +1,33 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Box, Eye, EyeOff, Lock, Mail, User } from 'lucide-react'
+import { Box, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('brian@replaybrick.com')
   const [password, setPassword] = useState('Brian!1138')
-  const [name, setName] = useState('')
   const [showPw, setShowPw] = useState(false)
-  const { login, register } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const { login } = useAuth()
   const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (isLogin) {
-      const result = login(email, password)
+    if (busy) return
+    setBusy(true)
+    try {
+      const result = await login(email, password)
       if (result.success) {
-        toast.success('Welcome back, Brian!')
+        toast.success('Welcome back!')
         navigate('/')
       } else {
         toast.error(result.error)
       }
-    } else {
-      if (!name.trim()) { toast.error('Name is required'); return }
-      if (password.length < 6) { toast.error('Password must be at least 6 characters'); return }
-      const result = register(name, email, password)
-      if (result.success) {
-        toast.success('Account created! Welcome!')
-        navigate('/')
-      } else {
-        toast.error(result.error)
-      }
+    } catch {
+      toast.error('Login failed')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -50,41 +45,7 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-6">
-          <div className="flex mb-6 bg-dark-bg rounded-lg p-1">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                isLogin ? 'bg-lego-red text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                !isLogin ? 'bg-lego-red text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Register
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full bg-dark-bg border border-dark-border rounded-lg pl-10 pr-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lego-red"
-                    placeholder="Your name"
-                  />
-                </div>
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
               <div className="relative">
@@ -120,16 +81,15 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            {isLogin && (
-              <p className="text-xs text-gray-500">
-                Demo: brian@replaybrick.com / Brian!1138
-              </p>
-            )}
+            <p className="text-xs text-gray-500">
+              brian@replaybrick.com / Brian!1138
+            </p>
             <button
               type="submit"
-              className="w-full bg-lego-red hover:bg-red-700 text-white font-medium py-2.5 rounded-lg transition-colors"
+              disabled={busy}
+              className="w-full bg-lego-red hover:bg-red-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
+              {busy ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
         </div>

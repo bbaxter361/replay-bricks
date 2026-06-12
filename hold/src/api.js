@@ -5,12 +5,24 @@ const API_BASE = import.meta.env.DEV
   ? 'http://localhost:3002/api'
   : 'https://replaybrick.com/api/hold';
 
+const TOKEN_KEY = 'hold_api_token';
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setApiToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
-  const config = {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  };
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const config = { headers, ...options };
 
   const response = await fetch(url, config);
   const data = await response.json();
@@ -127,4 +139,41 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids }),
     }),
+
+  // Push / Reconcile (two-way sync)
+  getPushStatus: () => request('/push/status'),
+  setPushMode: (mode) =>
+    request('/push/mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  reconcileAll: () => request('/reconcile', { method: 'POST' }),
+  reconcileOrder: (orderId) =>
+    request(`/reconcile/${orderId}`, { method: 'POST' }),
+
+  // Scheduler
+  getSchedulerStatus: () => request('/scheduler/status'),
+  triggerTick: () => request('/scheduler/tick', { method: 'POST' }),
+  triggerBackup: () => request('/scheduler/backup', { method: 'POST' }),
+
+  // Settings
+  getSettings: () => request('/settings'),
+  updateSettings: (updates) =>
+    request('/settings', { method: 'PUT', body: JSON.stringify(updates) }),
+
+  // Reports
+  getReports: () => request('/reports'),
+
+  // Picking
+  getPicking: (orderId) =>
+    request(`/picking${orderId ? '?order_id=' + orderId : ''}`),
+
+  // Part-out
+  partOut: (setNo, options) =>
+    request(`/partout/${setNo}`, { method: 'POST', body: JSON.stringify(options || {}) }),
+  confirmPartOut: (setNo, data) =>
+    request(`/partout/${setNo}/confirm`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Pricing engine
+  getPricingPreview: (ruleId) =>
+    request(`/pricing/preview${ruleId ? '?rule_id=' + ruleId : ''}`),
+  applyPricing: (changes) =>
+    request('/pricing/apply', { method: 'POST', body: JSON.stringify({ changes }) }),
 };

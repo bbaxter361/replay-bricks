@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import { getDb } from './db.js';
+import crypto from 'crypto';
+import { getDb, getSetting, setSetting } from './db.js';
 import { SyncEngine } from './sync.js';
 import { BrickStoreSync } from './brickstore.js';
 import { BrickLinkClient } from './bricklink.js';
+import { PushEngine } from './push.js';
+import { Scheduler } from './scheduler.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,9 +21,42 @@ app.use(express.json());
 const db = getDb();
 const sync = new SyncEngine();
 const bsSync = new BrickStoreSync();
+const push = new PushEngine(sync);
+const scheduler = new Scheduler(sync, push);
 
 // Try to load credentials on startup
 sync.loadCredentials();
+
+// ========== AUTH (simple bearer token) ==========
+// Token lives in settings.api_token; generated on first boot.
+let apiToken = getSetting(db, 'api_token', null);
+if (!apiToken) {
+  apiToken = crypto.randomBytes(24).toString('hex');
+  setSetting(db, 'api_token', apiToken);
+  console.log(`🔑 Generated API token (stored in settings table)`);
+}
+
+app.use('/api', (req, res, next) => {
+  // Status + login stay open
+  if (req.path === '/status' || req.path === '/auth/login') return next();
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
+  if (token === apiToken) return next();
+  return res.status(401).json({ error: 'Unauthorized' });
+});
+
+// Login: exchanges the portal credentials for the API token
+const USERS = {
+  'brian@replaybrick.com': 'Brian!1138',
+  'amanda@replaybrick.com': 'Brian!1138',
+};
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (USERS[String(email || '').toLowerCase()] === password) {
+    return res.json({ ok: true, token: apiToken, name: email.split('@')[0] });
+  }
+  res.status(401).json({ error: 'Invalid credentials' });
+});
 
 // ========== STATUS ==========
 
@@ -199,9 +235,9 @@ app.get('/api/inventory/:id', (req, res) => {
   res.json({ item, lots });
 });
 
-app.put('/api/inventory/:id', (req, res) => {
-  const { quantity, unit_price_cents, location, notes, condition } = req.body;
-  
+app.put('/api/inventory/:id', async (req, res) => {
+  const { quantity, unit_price_cents, location, notes, condition, push_to_marketplaces } = req.body;
+
   db.prepare(`
     UPDATE inventory SET
       quantity = COALESCE(?, quantity),
@@ -213,7 +249,20 @@ app.put('/api/inventory/:id', (req, res) => {
     WHERE id = ?
   `).run(quantity ?? null, unit_price_cents ?? null, location ?? null, notes ?? null, condition ?? null, req.params.id);
 
-  res.json({ ok: true });
+  // Push qty/price changes out to linked marketplace lots (honors push_mode)
+  let pushResults = null;
+  if (push_to_marketplaces !== false && (quantity !== undefined || unit_price_cents !== undefined)) {
+    try {
+      pushResults = await push.pushInventoryChange(parseInt(req.params.id), {
+        quantity: quantity ?? null,
+        unitPriceCents: unit_price_cents ?? null,
+      });
+    } catch (err) {
+      pushResults = { error: err.message };
+    }
+  }
+
+  res.json({ ok: true, push: pushResults, push_mode: push.mode });
 });
 
 // ========== PRICE GUIDE ==========
@@ -393,15 +442,25 @@ app.get('/api/orders/:id', (req, res) => {
   res.json({ ...order, items });
 });
 
-app.put('/api/orders/:id/status', (req, res) => {
-  const { status } = req.body;
+app.put('/api/orders/:id/status', async (req, res) => {
+  const { status, push_to_marketplace } = req.body;
   if (!status) return res.status(400).json({ error: 'status required' });
 
   db.prepare(`
     UPDATE orders SET status = ?, last_synced_at = datetime('now') WHERE id = ?
   `).run(status, req.params.id);
 
-  res.json({ ok: true });
+  // Push status change back to the marketplace (honors push_mode)
+  let pushResult = null;
+  if (push_to_marketplace !== false) {
+    try {
+      pushResult = await push.pushOrderStatus(parseInt(req.params.id), status);
+    } catch (err) {
+      pushResult = { error: err.message };
+    }
+  }
+
+  res.json({ ok: true, push: pushResult, push_mode: push.mode });
 });
 
 // ========== DASHBOARD STATS ==========
@@ -818,10 +877,367 @@ app.post('/api/travel/search', async (req, res) => {
   }
 });
 
+// ========== PUSH / RECONCILE (two-way sync) ==========
+
+app.get('/api/push/status', (req, res) => {
+  const recent = db.prepare('SELECT * FROM push_log ORDER BY created_at DESC, id DESC LIMIT 50').all();
+  const counts = db.prepare(`
+    SELECT mode, status, COUNT(*) as cnt FROM push_log GROUP BY mode, status
+  `).all();
+  res.json({ push_mode: push.mode, counts, recent });
+});
+
+app.post('/api/push/mode', (req, res) => {
+  const { mode } = req.body;
+  if (!['dry_run', 'live'].includes(mode)) {
+    return res.status(400).json({ error: "mode must be 'dry_run' or 'live'" });
+  }
+  setSetting(db, 'push_mode', mode);
+  res.json({ ok: true, push_mode: mode });
+});
+
+app.post('/api/reconcile', async (req, res) => {
+  try {
+    const result = await push.reconcileAll();
+    res.json({ push_mode: push.mode, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/reconcile/:orderId', async (req, res) => {
+  try {
+    // Allow re-running a specific order (clears the stamp first)
+    db.prepare('UPDATE orders SET reconciled_at = NULL WHERE id = ?').run(req.params.orderId);
+    const result = await push.reconcileOrder(parseInt(req.params.orderId));
+    res.json({ push_mode: push.mode, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== SCHEDULER ==========
+
+app.get('/api/scheduler/status', (req, res) => {
+  res.json(scheduler.status());
+});
+
+app.post('/api/scheduler/tick', async (req, res) => {
+  try {
+    const result = await scheduler.tick();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/scheduler/backup', (req, res) => {
+  try {
+    const dest = scheduler.backup();
+    res.json({ ok: true, backup: dest });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== SETTINGS ==========
+
+app.get('/api/settings', (req, res) => {
+  const rows = db.prepare('SELECT key, value FROM settings').all();
+  const out = {};
+  for (const r of rows) {
+    if (r.key === 'api_token') continue; // never expose
+    out[r.key] = r.value;
+  }
+  res.json(out);
+});
+
+app.put('/api/settings', (req, res) => {
+  const allowed = ['push_mode', 'sync_interval_min', 'auto_sync_enabled', 'backup_keep_days'];
+  const updated = {};
+  for (const [k, v] of Object.entries(req.body || {})) {
+    if (allowed.includes(k)) {
+      setSetting(db, k, v);
+      updated[k] = String(v);
+    }
+  }
+  res.json({ ok: true, updated });
+});
+
+// ========== PICKING ==========
+
+// Pick list across all open (paid/picked) orders, sorted by location for an
+// efficient walk through the storage bins. ?order_id=N narrows to one order.
+app.get('/api/picking', (req, res) => {
+  const { order_id } = req.query;
+
+  let rows;
+  if (order_id) {
+    rows = db.prepare(`
+      SELECT oi.*, o.marketplace as order_marketplace, o.order_id as marketplace_order_id,
+             o.buyer_name, o.status as order_status,
+             i.location, i.quantity as stock_quantity, i.id as inventory_id,
+             c.color_name, c.color_code
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      LEFT JOIN inventory i ON i.part_no = oi.part_no
+        AND (i.color_id = oi.color_id OR (i.color_id IS NULL AND oi.color_id IS NULL))
+        AND i.condition = COALESCE(oi.condition, 'USED')
+      LEFT JOIN bl_colors c ON oi.color_id = c.color_id
+      WHERE o.id = ?
+      ORDER BY i.location ASC, oi.part_no ASC
+    `).all(order_id);
+  } else {
+    rows = db.prepare(`
+      SELECT oi.*, o.marketplace as order_marketplace, o.order_id as marketplace_order_id,
+             o.buyer_name, o.status as order_status,
+             i.location, i.quantity as stock_quantity, i.id as inventory_id,
+             c.color_name, c.color_code
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      LEFT JOIN inventory i ON i.part_no = oi.part_no
+        AND (i.color_id = oi.color_id OR (i.color_id IS NULL AND oi.color_id IS NULL))
+        AND i.condition = COALESCE(oi.condition, 'USED')
+      LEFT JOIN bl_colors c ON oi.color_id = c.color_id
+      WHERE o.status IN ('paid', 'picked')
+      ORDER BY i.location ASC, oi.part_no ASC
+    `).all();
+  }
+
+  const items = rows.map(r => ({
+    ...r,
+    image_url: r.color_id
+      ? `https://img.bricklink.com/ItemImage/PN/${r.color_id}/${r.part_no}.png`
+      : `https://img.bricklink.com/ItemImage/PN/0/${r.part_no}.png`,
+  }));
+
+  res.json({ items, total: items.length });
+});
+
+// ========== PART-OUT ==========
+
+// Pull a set's full part inventory from BrickLink + price guide, ready to
+// review and push into pending items.
+app.post('/api/partout/:setNo', async (req, res) => {
+  if (!sync.isConfigured('bricklink')) {
+    return res.status(400).json({ error: 'BrickLink not configured' });
+  }
+
+  const setNo = req.params.setNo.includes('-') ? req.params.setNo : `${req.params.setNo}-1`;
+  const { condition = 'USED', include_prices = true } = req.body || {};
+
+  try {
+    const subsets = await sync.blClient.getItemSubsets('SET', setNo, null, { break_minifigs: false });
+    if (!Array.isArray(subsets)) {
+      return res.status(404).json({ error: `No inventory found for set ${setNo}` });
+    }
+
+    const parts = [];
+    for (const subset of subsets) {
+      for (const entry of subset.entries || []) {
+        const item = entry.item || {};
+        parts.push({
+          part_no: item.no,
+          part_name: item.name,
+          item_type: item.type,
+          color_id: entry.color_id ?? null,
+          quantity: entry.quantity || 0,
+          extra: !!entry.is_extra,
+          image_url: entry.color_id
+            ? `https://img.bricklink.com/ItemImage/PN/${entry.color_id}/${item.no}.png`
+            : `https://img.bricklink.com/ItemImage/PN/0/${item.no}.png`,
+        });
+      }
+    }
+
+    // Optionally price the first N parts from cached data (full pricing happens on confirm)
+    if (include_prices) {
+      const cachedPrices = db.prepare(`
+        SELECT part_no, color_id, avg_price_cents FROM price_cache WHERE condition = ?
+      `).all(condition);
+      const priceMap = new Map(cachedPrices.map(p => [`${p.part_no}|${p.color_id}`, p.avg_price_cents]));
+      for (const p of parts) {
+        p.cached_avg_price_cents = priceMap.get(`${p.part_no}|${p.color_id}`) ?? null;
+      }
+    }
+
+    res.json({ set_no: setNo, total_lots: parts.length, total_pieces: parts.reduce((s, p) => s + p.quantity, 0), parts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send part-out results into pending review
+app.post('/api/partout/:setNo/confirm', async (req, res) => {
+  const { parts, condition = 'USED', location = null } = req.body || {};
+  if (!Array.isArray(parts) || parts.length === 0) {
+    return res.status(400).json({ error: 'parts array required' });
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO pending_items (part_no, color_id, color_name, part_name, quantity, condition, location, unit_price_cents, notes, source, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'partout', 'pending')
+  `);
+
+  let count = 0;
+  const txn = db.transaction(() => {
+    for (const p of parts) {
+      insert.run(
+        p.part_no, p.color_id ?? null, p.color_name || null, p.part_name || '',
+        p.quantity || 1, p.condition || condition, p.location || location,
+        p.unit_price_cents ?? null, `Part-out: ${req.params.setNo}`
+      );
+      count++;
+    }
+  });
+  txn();
+
+  res.json({ ok: true, added: count });
+});
+
+// ========== PRICING ENGINE ==========
+
+// Preview repricing: apply BrickLink avg prices + rules to inventory.
+// Does NOT change anything — returns proposed changes.
+app.get('/api/pricing/preview', (req, res) => {
+  const { rule_id } = req.query;
+  const rules = rule_id
+    ? db.prepare('SELECT * FROM pricing_rules WHERE id = ? AND enabled = 1').all(rule_id)
+    : db.prepare('SELECT * FROM pricing_rules WHERE enabled = 1').all();
+
+  const items = db.prepare(`
+    SELECT i.*, c.color_name,
+      pc.avg_price_cents as market_avg_cents
+    FROM inventory i
+    LEFT JOIN bl_colors c ON i.color_id = c.color_id
+    LEFT JOIN price_cache pc ON pc.part_no = i.part_no
+      AND (pc.color_id = i.color_id OR (pc.color_id IS NULL AND i.color_id IS NULL))
+      AND pc.condition = i.condition AND pc.source = 'bricklink'
+    WHERE i.quantity > 0
+  `).all();
+
+  const proposals = [];
+  for (const item of items) {
+    if (!item.market_avg_cents) continue;
+
+    let newPrice = item.market_avg_cents;
+    for (const rule of rules) {
+      if (rule.condition && rule.condition !== item.condition) continue;
+      if (rule.markup_percent) newPrice = Math.round(newPrice * (1 + rule.markup_percent / 100));
+      if (rule.markup_fixed_cents) newPrice += rule.markup_fixed_cents;
+      if (rule.min_price_cents && newPrice < rule.min_price_cents) newPrice = rule.min_price_cents;
+      if (rule.max_price_cents && newPrice > rule.max_price_cents) newPrice = rule.max_price_cents;
+    }
+
+    if (newPrice !== item.unit_price_cents) {
+      proposals.push({
+        inventory_id: item.id,
+        part_no: item.part_no,
+        part_name: item.part_name,
+        color_name: item.color_name,
+        condition: item.condition,
+        quantity: item.quantity,
+        current_price_cents: item.unit_price_cents,
+        market_avg_cents: item.market_avg_cents,
+        proposed_price_cents: newPrice,
+        change_cents: newPrice - (item.unit_price_cents || 0),
+      });
+    }
+  }
+
+  res.json({ rules_applied: rules.length, proposals, total: proposals.length });
+});
+
+// Apply repricing for selected inventory ids (or all proposals)
+app.post('/api/pricing/apply', async (req, res) => {
+  const { changes } = req.body || {};
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return res.status(400).json({ error: 'changes array required: [{inventory_id, price_cents}]' });
+  }
+
+  const results = [];
+  for (const ch of changes) {
+    try {
+      db.prepare(`
+        UPDATE inventory SET unit_price_cents = ?, updated_at = datetime('now') WHERE id = ?
+      `).run(ch.price_cents, ch.inventory_id);
+
+      const pushed = await push.pushInventoryChange(ch.inventory_id, { unitPriceCents: ch.price_cents });
+      results.push({ inventory_id: ch.inventory_id, ok: true, push: pushed });
+    } catch (err) {
+      results.push({ inventory_id: ch.inventory_id, error: err.message });
+    }
+  }
+
+  res.json({ ok: true, push_mode: push.mode, applied: results.length, results });
+});
+
+// ========== REPORTS ==========
+
+app.get('/api/reports', (req, res) => {
+  const byCondition = db.prepare(`
+    SELECT condition, COUNT(*) as lots, SUM(quantity) as pieces, SUM(quantity * COALESCE(unit_price_cents,0)) as value_cents
+    FROM inventory GROUP BY condition
+  `).all();
+
+  const byColor = db.prepare(`
+    SELECT c.color_name, COUNT(*) as lots, SUM(i.quantity) as pieces
+    FROM inventory i LEFT JOIN bl_colors c ON i.color_id = c.color_id
+    GROUP BY i.color_id ORDER BY pieces DESC LIMIT 15
+  `).all();
+
+  const byMarketplace = db.prepare(`
+    SELECT marketplace, COUNT(*) as lots, SUM(quantity) as pieces, SUM(quantity * COALESCE(unit_price_cents,0)) as value_cents
+    FROM marketplace_lots GROUP BY marketplace
+  `).all();
+
+  const salesByMonth = db.prepare(`
+    SELECT substr(order_date, 1, 7) as month, marketplace, COUNT(*) as orders, SUM(COALESCE(total_price_cents,0)) as revenue_cents
+    FROM orders WHERE status != 'cancelled' AND order_date IS NOT NULL
+    GROUP BY month, marketplace ORDER BY month DESC LIMIT 24
+  `).all();
+
+  const topValue = db.prepare(`
+    SELECT i.part_no, i.part_name, c.color_name, i.quantity, i.unit_price_cents,
+           (i.quantity * COALESCE(i.unit_price_cents,0)) as total_cents
+    FROM inventory i LEFT JOIN bl_colors c ON i.color_id = c.color_id
+    ORDER BY total_cents DESC LIMIT 15
+  `).all();
+
+  res.json({ byCondition, byColor, byMarketplace, salesByMonth, topValue });
+});
+
+// CSV export
+app.get('/api/inventory/export/csv', (req, res) => {
+  const items = db.prepare(`
+    SELECT i.part_no, i.part_name, c.color_name, i.color_id, i.quantity, i.condition,
+           i.location, i.unit_price_cents, i.notes
+    FROM inventory i LEFT JOIN bl_colors c ON i.color_id = c.color_id
+    ORDER BY i.part_no
+  `).all();
+
+  const esc = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const header = 'part_no,part_name,color_name,color_id,quantity,condition,location,unit_price,notes';
+  const lines = items.map(i => [
+    i.part_no, i.part_name, i.color_name, i.color_id, i.quantity, i.condition,
+    i.location, i.unit_price_cents != null ? (i.unit_price_cents / 100).toFixed(2) : '', i.notes
+  ].map(esc).join(','));
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="hold-inventory.csv"');
+  res.send([header, ...lines].join('\n'));
+});
+
 // ========== STARTUP ==========
 
 app.listen(PORT, () => {
   console.log(`🔄 Hold server running on http://localhost:${PORT}`);
   console.log(`   BrickLink: ${sync.isConfigured('bricklink') ? '✅' : '❌'}`);
   console.log(`   BrickOwl:  ${sync.isConfigured('brickowl') ? '✅' : '❌'}`);
+  scheduler.start();
 });

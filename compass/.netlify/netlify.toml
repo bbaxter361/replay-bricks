@@ -1,31 +1,98 @@
+headersOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
-headers = []
+functionsDirectory = "/home/bbaxter/workspace/replay-bricks/compass/website/netlify/functions"
+functionsDirectoryOrigin = "config"
 
 [functions]
 
+[functions.spring]
+timeout = 60.0
+memory = 2048.0
+
 [functions."*"]
+external_node_modules = ["pdf-parse", "mammoth", "xlsx", "@netlify/blobs"]
+node_bundler = "esbuild"
 
 [build]
-publish = "/home/bbaxter/workspace/replay-bricks/compass/dist"
+publish = "/home/bbaxter/workspace/replay-bricks/compass/website/dist"
 publishOrigin = "config"
 commandOrigin = "config"
 base = "/home/bbaxter/workspace/replay-bricks/compass"
-command = "echo 'Pre-built — skip build'"
+command = "cd website && npm ci && npm run build"
+functions = "/home/bbaxter/workspace/replay-bricks/compass/website/netlify/functions"
 
 [build.environment]
 
 [build.processing]
+skip_processing = false
 
 [build.processing.css]
 
 [build.processing.html]
+pretty_urls = true
 
 [build.processing.images]
 
 [build.processing.js]
 
 [build.services]
+
+[[headers]]
+for = "/hold/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-Content-Type-Options = "nosniff"
+Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self'; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-Content-Type-Options = "nosniff"
+Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://replaybricksv2.netlify.app https://api.deepseek.com https://api.openai.com https://api.canva.com https://api.bricklink.com https://api.brickowl.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[redirects]]
+from = "/api/hold/*"
+to = "/.netlify/functions/hold"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/spring"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/hold/*"
+to = "/hold/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
 
 [[redirects]]
 from = "/*"

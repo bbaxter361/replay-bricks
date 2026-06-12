@@ -1,39 +1,40 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { setApiToken } from '../api'
 
 const AuthContext = createContext()
 
-const USERS_KEY = 'hold_users'
 const SESSION_KEY = 'hold_session'
-
-const defaultUser = {
-  email: 'brian@replaybrick.com',
-  password: 'Brian!1138',
-  name: 'Brian',
-}
-
-const amandaUser = {
-  email: 'amanda@replaybrick.com',
-  password: 'Brian!1138',
-  name: 'Amanda',
-}
+const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3002/api'
+  : 'https://replaybrick.com/api/hold';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(USERS_KEY)
-    if (!stored) {
-      localStorage.setItem(USERS_KEY, JSON.stringify([defaultUser, amandaUser]))
-    }
+    // Restore session
+    const session = localStorage.getItem(SESSION_KEY)
     // Auto-login if coming from website iframe with auto=true
     const params = new URLSearchParams(window.location.search)
     const autoUser = params.get('auto')
-    const session = localStorage.getItem(SESSION_KEY)
     if (autoUser === 'true' && !session) {
-      const autoLogin = { email: defaultUser.email, name: defaultUser.name }
-      localStorage.setItem(SESSION_KEY, JSON.stringify(autoLogin))
-      setUser(autoLogin)
+      // Auto-login against the real API
+      fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'brian@replaybrick.com', password: 'Brian!1138' }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            setApiToken(data.token)
+            const u = { email: 'brian@replaybrick.com', name: 'Brian' }
+            localStorage.setItem(SESSION_KEY, JSON.stringify(u))
+            setUser(u)
+          }
+        })
+        .catch(() => {})
     } else if (session) {
       try {
         setUser(JSON.parse(session))
@@ -42,38 +43,35 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const login = (email, password) => {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
-    const found = users.find(u => u.email === email && u.password === password)
-    if (found) {
-      const sessionUser = { email: found.email, name: found.name }
-      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
-      setUser(sessionUser)
-      return { success: true }
+  const login = async (email, password) => {
+    try {
+      const resp = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await resp.json()
+      if (data.ok) {
+        setApiToken(data.token)
+        const sessionUser = { email, name: data.name || email.split('@')[0] }
+        localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
+        setUser(sessionUser)
+        return { success: true }
+      }
+      return { success: false, error: data.error || 'Login failed' }
+    } catch (err) {
+      return { success: false, error: 'Cannot reach server' }
     }
-    return { success: false, error: 'Invalid email or password' }
-  }
-
-  const register = (name, email, password) => {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
-    if (users.find(u => u.email === email)) {
-      return { success: false, error: 'Email already registered' }
-    }
-    users.push({ name, email, password })
-    localStorage.setItem(USERS_KEY, JSON.stringify(users))
-    const sessionUser = { email, name }
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
-    setUser(sessionUser)
-    return { success: true }
   }
 
   const logout = () => {
+    setApiToken(null)
     localStorage.removeItem(SESSION_KEY)
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

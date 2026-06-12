@@ -64,7 +64,8 @@ export class SyncEngine {
     const partNo = item.item?.no || item.part_no;
     const colorId = item.color_id || item.color?.color_id || null;
     const partName = item.item?.name || item.part_name || '';
-    const condition = item.condition || 'USED';
+    // BL API returns new_or_used: 'N' | 'U'
+    const condition = (item.new_or_used || item.condition || 'U') === 'N' || item.condition === 'NEW' ? 'NEW' : 'USED';
 
     // Upsert into main inventory — handle NULL color_id correctly
     const existing = this.db.prepare(
@@ -216,8 +217,12 @@ export class SyncEngine {
 
     // Get items
     try {
-      const items = await this.blClient.getOrderItems(order.order_id);
-      if (Array.isArray(items)) {
+      const itemsRaw = await this.blClient.getOrderItems(order.order_id);
+      // BL returns an array of BATCHES (array of arrays) — flatten one level
+      const items = Array.isArray(itemsRaw)
+        ? itemsRaw.flatMap(b => (Array.isArray(b) ? b : [b]))
+        : [];
+      if (items.length) {
         const orderRow = this.db.prepare(
           'SELECT id FROM orders WHERE marketplace = ? AND order_id = ?'
         ).get('bricklink', String(order.order_id));
@@ -227,8 +232,8 @@ export class SyncEngine {
           this.db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderRow.id);
 
           const insertItem = this.db.prepare(`
-            INSERT INTO order_items (order_id, part_no, color_id, part_name, quantity, unit_price_cents, condition, marketplace)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'bricklink')
+            INSERT INTO order_items (order_id, part_no, color_id, part_name, quantity, unit_price_cents, condition, marketplace, lot_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'bricklink', ?)
           `);
 
           for (const item of items) {
@@ -239,7 +244,8 @@ export class SyncEngine {
               item.item?.name || item.part_name || '',
               item.quantity || 0,
               item.unit_price ? Math.round(parseFloat(item.unit_price) * 100) : 0,
-              item.new_or_used || 'U'
+              (item.new_or_used || 'U') === 'N' ? 'NEW' : 'USED',
+              item.inventory_id ? String(item.inventory_id) : null
             );
           }
         }
@@ -262,6 +268,54 @@ export class SyncEngine {
 
   // ========== Sync BrickOwl Inventory ==========
 
+  /** Build BO color id → BL color id map (cached for the process lifetime). */
+  async _getBOColorMap() {
+    if (this._boColorMap) return this._boColorMap;
+    const map = new Map();
+    try {
+      const colors = await this.boClient.request('GET', '/catalog/color_list', {});
+      const entries = Array.isArray(colors) ? colors : Object.values(colors);
+      for (const c of entries) {
+        if (c && c.id !== undefined && Array.isArray(c.bl_ids) && c.bl_ids.length) {
+          map.set(String(c.id), parseInt(c.bl_ids[0]));
+        }
+      }
+    } catch (err) {
+      console.warn('BO color list unavailable, falling back to raw color ids:', err.message);
+    }
+    this._boColorMap = map;
+    return map;
+  }
+
+  /**
+   * Resolve a BO item (inventory lot or order item) to BrickLink-compatible
+   * part_no + color_id so it lands on the same inventory row as BL syncs.
+   */
+  _resolveBOItem(item, colorMap) {
+    // part number: design_id for parts, set_number for sets, boid base as fallback
+    let partNo = null;
+    if (Array.isArray(item.ids)) {
+      if (item.type === 'Set') {
+        const setNo = item.ids.find(x => x.type === 'set_number');
+        if (setNo) partNo = String(setNo.id);
+      } else {
+        const design = item.ids.find(x => x.type === 'design_id');
+        if (design) partNo = String(design.id);
+      }
+    }
+    const boid = item.boid || '';
+    const [boidBase, boColorId] = String(boid).split('-');
+    if (!partNo) partNo = boidBase || item.element_id || item.part_no || boid;
+
+    // color: BO color id → BL color id
+    let colorId = null;
+    if (boColorId !== undefined && boColorId !== '') {
+      colorId = colorMap.has(boColorId) ? colorMap.get(boColorId) : parseInt(boColorId);
+    }
+
+    return { partNo, colorId };
+  }
+
   async syncBOInventory() {
     if (!this.boClient) throw new Error('BrickOwl not configured');
 
@@ -270,12 +324,13 @@ export class SyncEngine {
     const errors = [];
 
     try {
+      const colorMap = await this._getBOColorMap();
       const items = await this.boClient.getInventory({ limit: 1000 });
       const list = Array.isArray(items) ? items : (items.lots || items.list || []);
 
       for (const item of list) {
         try {
-          this._upsertBOInventoryItem(item);
+          this._upsertBOInventoryItem(item, colorMap);
           count++;
         } catch (err) {
           errors.push(`Lot ${item.lot_id}: ${err.message}`);
@@ -290,14 +345,10 @@ export class SyncEngine {
     return { synced: count, errors };
   }
 
-  _upsertBOInventoryItem(item) {
-    // BO uses BOID format like "44980-38" (element_id-color_id)
-    const boid = item.boid || '';
-    const [elementId, boColorId] = boid.split('-');
-    const partNo = elementId || item.element_id || item.part_no || boid;
-    const colorId = boColorId ? parseInt(boColorId) : null;
+  _upsertBOInventoryItem(item, colorMap = new Map()) {
+    const { partNo, colorId } = this._resolveBOItem(item, colorMap);
     const partName = item.name || item.part_name || '';
-    const condition = item.condition === 'N' ? 'NEW' : 'USED';
+    const condition = String(item.con || item.condition || 'used').toLowerCase().startsWith('new') ? 'NEW' : 'USED';
 
     const existing = this.db.prepare(
       colorId !== null
@@ -389,26 +440,53 @@ export class SyncEngine {
 
   async _upsertBOOrder(order) {
     const orderId = String(order.order_id);
-    const totalPriceCents = order.total
-      ? Math.round(parseFloat(order.total) * 100)
+
+    // BO returns order_date as a unix timestamp string
+    let orderDate = null;
+    if (order.order_date && /^\d+$/.test(String(order.order_date))) {
+      orderDate = new Date(parseInt(order.order_date) * 1000).toISOString().slice(0, 10);
+    } else if (order.date_created) {
+      orderDate = String(order.date_created).split(' ')[0];
+    }
+    const totalPriceCents = (order.base_order_total || order.total)
+      ? Math.round(parseFloat(order.base_order_total || order.total) * 100)
       : null;
     const shippingCents = order.shipping
       ? Math.round(parseFloat(order.shipping) * 100)
       : 0;
 
+    // BO status comes as a display name ("Payment Received", "Shipped", "Cancelled")
+    // and/or a status_id. Map both.
+    const statusIdMap = {
+      1: 'pending',   // Pending
+      2: 'paid',      // Payment Received
+      3: 'picked',    // Processing
+      4: 'packed',    // Processed
+      5: 'shipped',   // Shipped
+      6: 'delivered', // Received
+      8: 'cancelled', // Cancelled
+    };
     const statusMap = {
+      'pending': 'pending',
       'unpaid': 'pending',
+      'payment received': 'paid',
       'paid': 'paid',
+      'processing': 'picked',
       'picking': 'picked',
       'picked': 'picked',
+      'processed': 'packed',
       'packing': 'packed',
       'packed': 'packed',
       'shipped': 'shipped',
+      'received': 'delivered',
       'delivered': 'delivered',
       'cancelled': 'cancelled',
       'refunded': 'cancelled',
     };
-    const localStatus = statusMap[order.status] || 'pending';
+    const localStatus =
+      (order.status_id !== undefined && statusIdMap[parseInt(order.status_id)]) ||
+      statusMap[String(order.status || '').toLowerCase()] ||
+      'pending';
 
     this.db.prepare(`
       INSERT INTO orders (marketplace, order_id, buyer_name, status, total_items, total_price_cents, shipping_cents, currency, shipping_address, order_date, tracking_number, notes, last_synced_at)
@@ -428,15 +506,53 @@ export class SyncEngine {
       orderId,
       order.buyer_name || '',
       localStatus,
-      parseInt(order.item_count || order.total_items || 0),
+      parseInt(order.item_count || order.total_quantity || order.total_items || 0),
       totalPriceCents,
       shippingCents,
       order.currency || 'USD',
       order.shipping_address || '',
-      order.date_created ? order.date_created.split(' ')[0] : null,
+      orderDate,
       order.tracking || null,
       order.notes || null
     );
+
+    // Fetch and store line items (needed for picking + cross-marketplace reconcile)
+    try {
+      const items = await this.boClient.getOrderItems(orderId);
+      if (Array.isArray(items)) {
+        const colorMap = await this._getBOColorMap();
+        const orderRow = this.db.prepare(
+          'SELECT id FROM orders WHERE marketplace = ? AND order_id = ?'
+        ).get('brickowl', orderId);
+
+        if (orderRow) {
+          this.db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderRow.id);
+
+          const insertItem = this.db.prepare(`
+            INSERT INTO order_items (order_id, part_no, color_id, part_name, quantity, unit_price_cents, condition, marketplace, lot_id, remote_lot_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'brickowl', ?, ?)
+          `);
+
+          for (const item of items) {
+            const { partNo, colorId } = this._resolveBOItem(item, colorMap);
+
+            insertItem.run(
+              orderRow.id,
+              partNo,
+              colorId,
+              item.name || '',
+              parseInt(item.ordered_quantity || item.quantity || 0),
+              item.base_price ? Math.round(parseFloat(item.base_price) * 100) : 0,
+              (item.full_con || item.condition || 'used').toLowerCase().startsWith('new') ? 'NEW' : 'USED',
+              item.lot_id ? String(item.lot_id) : null,
+              item.bl_lot_id ? String(item.bl_lot_id) : null
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not fetch items for BO order ${orderId}: ${err.message}`);
+    }
   }
 
   // ========== Sync Logging ==========

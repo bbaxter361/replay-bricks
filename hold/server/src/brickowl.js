@@ -71,6 +71,10 @@ export class BrickOwlClient {
     return this.request('GET', '/order/view', { order_id: orderId });
   }
 
+  async getOrderItems(orderId) {
+    return this.request('GET', '/order/items', { order_id: orderId });
+  }
+
   async updateOrderStatus(orderId, status) {
     return this.request('POST', '/order/update', { order_id: orderId, status });
   }

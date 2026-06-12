@@ -51,7 +51,7 @@ export default function InventoryPage({ user, onLogout }) {
       {/* App iframe */}
       <div className="flex-1 relative">
         <iframe
-          src="http://localhost:5175?auto=true"
+          src={import.meta.env.DEV ? 'http://localhost:5175?auto=true' : '/hold/?auto=true'}
           className="absolute inset-0 w-full h-full border-0"
           title="Replay Bricks Inventory"
         />

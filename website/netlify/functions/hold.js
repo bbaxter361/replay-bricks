@@ -23,6 +23,7 @@ app.use(express.json({ limit: '50mb' }));
 
 // Strip /hold prefix when behind Netlify redirect (/api/hold/* → function)
 // Express routes are mounted at /api/* so we need to rewrite the URL
+// MUST run BEFORE auth middleware so req.path is clean
 app.use((req, res, next) => {
   if (req.url.startsWith('/api/hold/')) {
     req.url = req.url.replace('/api/hold/', '/api/');
@@ -30,6 +31,34 @@ app.use((req, res, next) => {
     req.url = req.url.replace('/api/hold', '/api');
   }
   next();
+});
+
+// ========== AUTH ==========
+// Generate a stable API token from deployment context (same token across invocations)
+const API_TOKEN = (() => {
+  if (process.env.HOLD_API_TOKEN) return process.env.HOLD_API_TOKEN;
+  return crypto.createHash('sha256').update('hold-replay-bricks-' + (process.env.NETLIFY_SITE_ID || 'local')).digest('hex').slice(0, 48);
+})();
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/status' || req.path === '/auth/login') return next();
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
+  if (token === API_TOKEN) return next();
+  return res.status(401).json({ error: 'Unauthorized' });
+});
+
+// Login: exchanges portal credentials for API token
+const USERS = {
+  'brian@replaybrick.com': 'Brian!1138',
+  'amanda@replaybrick.com': 'Brian!1138',
+};
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (USERS[String(email || '').toLowerCase()] === password) {
+    return res.json({ ok: true, token: API_TOKEN, name: email.split('@')[0] });
+  }
+  res.status(401).json({ error: 'Invalid credentials' });
 });
 
 // ============================================================
@@ -1891,7 +1920,422 @@ app.post('/api/pending/confirm', async (req, res) => {
 });
 
 // ============================================================
-// SCRAPING ENDPOINTS (not available in serverless mode)
+// INLINE BRICKLINK / BRICKOWL API CLIENTS (using existing oauthHeader above)
+// ============================================================
+
+async function blRequest(creds, method, path, params = null) {
+  const url = 'https://api.bricklink.com/api/store/v1' + path;
+  const qs = params && (method === 'GET' || method === 'DELETE') ? '?' + new URLSearchParams(params) : '';
+  const bodyParams = (method !== 'GET' && method !== 'DELETE') ? params : null;
+  // Use existing oauthHeader(method, url, params, consumerKey, consumerSecret, tokenValue, tokenSecret)
+  const extraParams = {};
+  if (bodyParams) {
+    // OAuth 1.0 includes POST body params in the signature
+    Object.assign(extraParams, bodyParams);
+  }
+  const auth = oauthHeader(method, url + qs, extraParams, creds.consumerKey, creds.consumerSecret, creds.tokenValue, creds.tokenSecret);
+  const opts = { method, headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' } };
+  if (bodyParams) opts.body = JSON.stringify(bodyParams);
+  const res = await fetch(url + qs, opts);
+  const data = await res.json();
+  if (data.meta?.code >= 400) throw new Error('BL ' + data.meta.code + ': ' + (data.meta.message || ''));
+  return data.data || data;
+}
+
+async function boRequest(apiKey, method, path, params = null) {
+  const url = 'https://api.brickowl.com/v1' + path;
+  const opts = { method, headers: { 'Content-Type': 'application/json', Accept: 'application/json' } };
+  if (params) {
+    params.key = apiKey;
+    if (method === 'GET') opts.url_ = url + '?' + new URLSearchParams(params);
+    else opts.body = JSON.stringify(params);
+  } else {
+    opts.url_ = url + '?key=' + apiKey;
+  }
+  // BrickOwl uses query param for auth; route GET/POST differently
+  let finalUrl = url;
+  if (params && method === 'GET') {
+    finalUrl = url + '?' + new URLSearchParams({ ...params, key: apiKey });
+  } else if (params) {
+    finalUrl = url + '?key=' + apiKey;
+    opts.body = JSON.stringify(params);
+  } else {
+    finalUrl = url + '?key=' + apiKey;
+  }
+  const res = await fetch(finalUrl, opts);
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+async function getCredentials() {
+  const creds = await blobRawGet('hold_api_credentials');
+  const out = { bricklink: null, brickowl: null };
+  for (const c of creds) {
+    const data = typeof c.credentials === 'string' ? JSON.parse(c.credentials) : c.credentials;
+    if (c.marketplace === 'bricklink') out.bricklink = data;
+    if (c.marketplace === 'brickowl') out.brickowl = data;
+  }
+  return out;
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await blobRawGet('hold_settings');
+    const out = {};
+    for (const s of settings) { if (s.key !== 'api_token') out[s.key] = s.value; }
+    if (!out.push_mode) out.push_mode = 'dry_run';
+    if (!out.sync_interval_min) out.sync_interval_min = '10';
+    if (!out.auto_sync_enabled) out.auto_sync_enabled = 'true';
+    if (!out.backup_keep_days) out.backup_keep_days = '14';
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/settings', async (req, res) => {
+  try {
+    const allowed = ['push_mode', 'sync_interval_min', 'auto_sync_enabled', 'backup_keep_days'];
+    const settings = await blobRawGet('hold_settings');
+    const updated = {};
+    for (const [k, v] of Object.entries(req.body || {})) {
+      if (allowed.includes(k)) {
+        const idx = settings.findIndex(s => s.key === k);
+        if (idx !== -1) settings[idx].value = String(v);
+        else settings.push({ key: k, value: String(v) });
+        updated[k] = String(v);
+      }
+    }
+    await blobRawSet('hold_settings', settings);
+    res.json({ ok: true, updated });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// REPORTS
+// ============================================================
+
+app.get('/api/reports', async (req, res) => {
+  try {
+    const inventory = await blobRawGet('hold_inventory');
+    const orders = await blobRawGet('hold_orders');
+    const lots = await blobRawGet('hold_marketplace_lots');
+
+    const byCondition = [
+      { condition: 'NEW', lots: inventory.filter(i => i.condition === 'NEW').length, pieces: inventory.filter(i => i.condition === 'NEW').reduce((s, i) => s + (i.quantity || 0), 0), value_cents: inventory.filter(i => i.condition === 'NEW').reduce((s, i) => s + (i.quantity || 0) * (i.unit_price_cents || 0), 0) },
+      { condition: 'USED', lots: inventory.filter(i => i.condition !== 'NEW').length, pieces: inventory.filter(i => i.condition !== 'NEW').reduce((s, i) => s + (i.quantity || 0), 0), value_cents: inventory.filter(i => i.condition !== 'NEW').reduce((s, i) => s + (i.quantity || 0) * (i.unit_price_cents || 0), 0) },
+    ];
+
+    const byMarketplace = [
+      { marketplace: 'bricklink', lots: lots.filter(l => l.marketplace === 'bricklink').length, pieces: lots.filter(l => l.marketplace === 'bricklink').reduce((s, l) => s + (l.quantity || 0), 0), value_cents: lots.filter(l => l.marketplace === 'bricklink').reduce((s, l) => s + (l.quantity || 0) * (l.unit_price_cents || 0), 0) },
+      { marketplace: 'brickowl', lots: lots.filter(l => l.marketplace === 'brickowl').length, pieces: lots.filter(l => l.marketplace === 'brickowl').reduce((s, l) => s + (l.quantity || 0), 0), value_cents: lots.filter(l => l.marketplace === 'brickowl').reduce((s, l) => s + (l.quantity || 0) * (l.unit_price_cents || 0), 0) },
+    ];
+
+    const topValue = inventory
+      .map(i => ({ ...i, total_cents: (i.quantity || 0) * (i.unit_price_cents || 0) }))
+      .sort((a, b) => b.total_cents - a.total_cents)
+      .slice(0, 15);
+
+    res.json({ byCondition, byMarketplace, topValue });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// PRICING PREVIEW & APPLY
+// ============================================================
+
+app.get('/api/pricing/preview', async (req, res) => {
+  try {
+    const rules = await blobRawGet('hold_pricing_rules');
+    const enabled = rules.filter(r => r.enabled !== false);
+    const inventory = await blobRawGet('hold_inventory');
+    const priceCache = await blobRawGet('hold_price_cache');
+
+    const proposals = [];
+    for (const item of inventory) {
+      if (!item.quantity || item.quantity <= 0) continue;
+      const cached = priceCache.find(pc =>
+        pc.part_no === item.part_no &&
+        (pc.color_id === item.color_id || (pc.color_id == null && item.color_id == null)) &&
+        pc.condition === item.condition && pc.source === 'bricklink'
+      );
+      if (!cached || !cached.avg_price_cents) continue;
+
+      let newPrice = cached.avg_price_cents;
+      for (const rule of enabled) {
+        if (rule.condition && rule.condition !== item.condition) continue;
+        if (rule.markup_percent) newPrice = Math.round(newPrice * (1 + rule.markup_percent / 100));
+        if (rule.markup_fixed_cents) newPrice += rule.markup_fixed_cents;
+        if (rule.min_price_cents && newPrice < rule.min_price_cents) newPrice = rule.min_price_cents;
+        if (rule.max_price_cents && newPrice > rule.max_price_cents) newPrice = rule.max_price_cents;
+      }
+      if (newPrice !== item.unit_price_cents) {
+        proposals.push({
+          inventory_id: item.id, part_no: item.part_no, part_name: item.part_name,
+          color_name: item.color_name || '', condition: item.condition, quantity: item.quantity,
+          current_price_cents: item.unit_price_cents, market_avg_cents: cached.avg_price_cents,
+          proposed_price_cents: newPrice, change_cents: newPrice - (item.unit_price_cents || 0),
+        });
+      }
+    }
+    res.json({ rules_applied: enabled.length, proposals, total: proposals.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/pricing/apply', async (req, res) => {
+  try {
+    const { changes } = req.body || {};
+    if (!Array.isArray(changes) || changes.length === 0) return res.status(400).json({ error: 'changes array required' });
+    const inventory = await blobRawGet('hold_inventory');
+    const results = [];
+    for (const ch of changes) {
+      const idx = inventory.findIndex(i => i.id === ch.inventory_id);
+      if (idx === -1) { results.push({ inventory_id: ch.inventory_id, error: 'Not found' }); continue; }
+      inventory[idx].unit_price_cents = ch.price_cents;
+      inventory[idx].updated_at = new Date().toISOString();
+      results.push({ inventory_id: ch.inventory_id, ok: true });
+    }
+    await blobRawSet('hold_inventory', inventory);
+    res.json({ ok: true, applied: results.filter(r => r.ok).length, results });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// PICKING
+// ============================================================
+
+app.get('/api/picking', async (req, res) => {
+  try {
+    const { order_id } = req.query;
+    const orderItems = await blobRawGet('hold_order_items');
+    const orders = await blobRawGet('hold_orders');
+    const inventory = await blobRawGet('hold_inventory');
+
+    let rows = orderItems.map(oi => {
+      const order = orders.find(o => o.id === oi.order_id) || {};
+      const inv = inventory.find(i => i.part_no === oi.part_no && (i.color_id === oi.color_id || (i.color_id == null && oi.color_id == null)));
+      return { ...oi, order_marketplace: order.marketplace, marketplace_order_id: order.order_id, buyer_name: order.buyer_name, order_status: order.status, location: inv?.location, stock_quantity: inv?.quantity, inventory_id: inv?.id };
+    });
+
+    if (order_id) rows = rows.filter(r => r.order_id === parseInt(order_id));
+    else rows = rows.filter(r => ['paid', 'picked'].includes(r.order_status));
+    rows.sort((a, b) => (a.location || '').localeCompare(b.location || ''));
+
+    const items = rows.map(r => ({
+      ...r,
+      image_url: r.color_id ? `https://img.bricklink.com/ItemImage/PN/${r.color_id}/${r.part_no}.png` : `https://img.bricklink.com/ItemImage/PN/0/${r.part_no}.png`,
+    }));
+
+    res.json({ items, total: items.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// PART-OUT
+// ============================================================
+
+app.post('/api/partout/:setNo', async (req, res) => {
+  try {
+    const creds = await getCredentials();
+    if (!creds.bricklink) return res.status(400).json({ error: 'BrickLink not configured' });
+    const setNo = req.params.setNo.includes('-') ? req.params.setNo : req.params.setNo + '-1';
+    const { condition = 'USED', include_prices = true } = req.body || {};
+
+    const subsets = await blRequest(creds.bricklink, 'GET', '/items/SET/' + setNo + '/subsets', { break_minifigs: 'false' });
+    if (!Array.isArray(subsets)) return res.status(404).json({ error: 'No inventory found for set ' + setNo });
+
+    const parts = [];
+    for (const subset of subsets) {
+      for (const entry of (subset.entries || [])) {
+        const item = entry.item || {};
+        parts.push({
+          part_no: item.no || entry.part_no || '', color_id: entry.color_id || null,
+          color_name: entry.color_name || '', part_name: item.name || entry.part_name || '',
+          quantity: entry.quantity || 0, condition,
+        });
+      }
+    }
+
+    if (include_prices) {
+      const priceCache = await blobRawGet('hold_price_cache');
+      for (const p of parts) {
+        const cached = priceCache.find(pc => pc.part_no === p.part_no && (pc.color_id === p.color_id || pc.color_id == null) && pc.condition === condition);
+        p.cached_avg_price_cents = cached?.avg_price_cents ?? null;
+      }
+    }
+
+    res.json({ set_no: setNo, total_lots: parts.length, total_pieces: parts.reduce((s, p) => s + p.quantity, 0), parts });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/partout/:setNo/confirm', async (req, res) => {
+  try {
+    const { parts, condition = 'USED', location = null } = req.body || {};
+    if (!Array.isArray(parts) || parts.length === 0) return res.status(400).json({ error: 'parts array required' });
+    const pending = await blobRawGet('hold_pending_items');
+    const nextId = Math.max(0, ...pending.map(p => p.id || 0)) + 1;
+    let count = 0;
+    for (const p of parts) {
+      pending.push({ id: nextId + count, part_no: p.part_no, color_id: p.color_id ?? null, color_name: p.color_name || null, part_name: p.part_name || '', quantity: p.quantity || 1, condition: p.condition || condition, location: p.location || location, unit_price_cents: p.unit_price_cents ?? null, notes: 'Part-out: ' + req.params.setNo, source: 'partout', status: 'pending', created_at: new Date().toISOString() });
+      count++;
+    }
+    await blobRawSet('hold_pending_items', pending);
+    res.json({ ok: true, added: count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// PUSH / RECONCILE (two-way sync)
+// ============================================================
+
+const PUSH_LOG_KEY = 'hold_push_log';
+
+async function logPush(mode, marketplace, action, status, detail) {
+  const log = await blobRawGet(PUSH_LOG_KEY);
+  log.push({ mode, marketplace, action, status, detail: detail || '', created_at: new Date().toISOString() });
+  await blobRawSet(PUSH_LOG_KEY, log.slice(-500));
+}
+
+app.get('/api/push/status', async (req, res) => {
+  try {
+    const settings = await blobRawGet('hold_settings');
+    const mode = settings.find(s => s.key === 'push_mode')?.value || 'dry_run';
+    const recent = (await blobRawGet(PUSH_LOG_KEY)).slice(-50);
+    const counts = [];
+    res.json({ push_mode: mode, counts, recent });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/push/mode', async (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (!['dry_run', 'live'].includes(mode)) return res.status(400).json({ error: "mode must be 'dry_run' or 'live'" });
+    const settings = await blobRawGet('hold_settings');
+    const idx = settings.findIndex(s => s.key === 'push_mode');
+    if (idx !== -1) settings[idx].value = mode;
+    else settings.push({ key: 'push_mode', value: mode });
+    await blobRawSet('hold_settings', settings);
+    await logPush(mode, 'system', 'mode_switch', 'ok', 'Switched to ' + mode);
+    res.json({ ok: true, push_mode: mode });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/reconcile', async (req, res) => {
+  try {
+    const settings = await blobRawGet('hold_settings');
+    const mode = settings.find(s => s.key === 'push_mode')?.value || 'dry_run';
+    const orders = await blobRawGet('hold_orders');
+    const results = [];
+    for (const order of orders) {
+      if (order.status === 'cancelled' || order.reconciled_at) continue;
+      try {
+        const r = await reconcileOrderInternal(order, mode);
+        if (r) results.push(r);
+      } catch (e) { await logPush(mode, order.marketplace, 'reconcile', 'error', 'Order ' + order.order_id + ': ' + e.message); }
+    }
+    res.json({ push_mode: mode, reconciled: results.length, results });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/reconcile/:orderId', async (req, res) => {
+  try {
+    const settings = await blobRawGet('hold_settings');
+    const mode = settings.find(s => s.key === 'push_mode')?.value || 'dry_run';
+    const orders = await blobRawGet('hold_orders');
+    const order = orders.find(o => o.id === parseInt(req.params.orderId));
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    // Clear stamp for re-run
+    order.reconciled_at = null;
+    const result = await reconcileOrderInternal(order, mode);
+    if (result) {
+      result.order_id = order.order_id;
+      await blobRawSet('hold_orders', orders);
+    }
+    res.json({ push_mode: mode, ...(result || { skipped: 'already reconciled' }) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+async function reconcileOrderInternal(order, mode) {
+  // When an order lands on one marketplace, decrement matching lots on the OTHER marketplace
+  const otherMp = order.marketplace === 'bricklink' ? 'brickowl' : 'bricklink';
+  const creds = await getCredentials();
+  if (!creds[otherMp]) { await logPush(mode, order.marketplace, 'reconcile', 'skipped', 'No ' + otherMp + ' credentials'); return null; }
+
+  const orderItems = await blobRawGet('hold_order_items');
+  const items = orderItems.filter(oi => oi.order_id === order.id);
+  if (items.length === 0) { await logPush(mode, order.marketplace, 'reconcile', 'skipped', 'No line items for order ' + order.order_id); return null; }
+
+  const lots = await blobRawGet('hold_marketplace_lots');
+  const inventory = await blobRawGet('hold_inventory');
+  const changes = [];
+
+  for (const item of items) {
+    const matchingLot = lots.find(l => l.marketplace === otherMp && l.inventory_id && inventory.find(i => i.id === l.inventory_id && i.part_no === item.part_no && (i.color_id === item.color_id || (i.color_id == null && item.color_id == null))));
+    if (!matchingLot) continue;
+
+    const newQty = Math.max(0, (matchingLot.quantity || 0) - (item.quantity || 0));
+    changes.push({ lot_id: matchingLot.lot_id, marketplace: otherMp, old_qty: matchingLot.quantity, new_qty: newQty, part_no: item.part_no });
+
+    if (mode === 'live') {
+      try {
+        if (otherMp === 'bricklink') {
+          await blRequest(creds.bricklink, 'PUT', '/inventories/' + matchingLot.lot_id, { quantity: newQty });
+        } else {
+          await boRequest(creds.brickowl, 'POST', '/inventory/update', { lot_id: matchingLot.lot_id, qty: newQty });
+        }
+        matchingLot.quantity = newQty;
+      } catch (e) {
+        await logPush(mode, otherMp, 'reconcile', 'error', 'API write failed for lot ' + matchingLot.lot_id + ': ' + e.message);
+        continue;
+      }
+    }
+    await logPush(mode, otherMp, 'reconcile', 'ok', 'Lot ' + matchingLot.lot_id + ' qty ' + matchingLot.quantity + '→' + newQty);
+    matchingLot.quantity = newQty;
+  }
+
+  if (mode === 'live' && changes.length > 0) {
+    await blobRawSet('hold_marketplace_lots', lots);
+  }
+  order.reconciled_at = new Date().toISOString();
+  await logPush(mode, order.marketplace, 'reconcile', 'ok', 'Order ' + order.order_id + ', ' + changes.length + ' lots adjusted on ' + otherMp);
+  return { order_id: order.order_id, marketplace: order.marketplace, changes, count: changes.length };
+}
+
+// ============================================================
+// SCHEDULER
+// ============================================================
+
+app.get('/api/scheduler/status', async (req, res) => {
+  try {
+    const settings = await blobRawGet('hold_settings');
+    const syncInterval = settings.find(s => s.key === 'sync_interval_min')?.value || '10';
+    const autoSync = settings.find(s => s.key === 'auto_sync_enabled')?.value !== 'false';
+    res.json({ enabled: autoSync, interval_min: parseInt(syncInterval), last_run: null, next_run: null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/scheduler/tick', async (req, res) => {
+  // Manual trigger for sync + reconcile (serverless — no cron, client-driven)
+  res.json({ ok: true, message: 'Scheduler tick queued. Use /api/sync/all/all to sync, /api/reconcile to reconcile.' });
+});
+
+app.post('/api/scheduler/backup', async (req, res) => {
+  try {
+    const keys = ['hold_inventory', 'hold_orders', 'hold_order_items', 'hold_marketplace_lots', 'hold_bl_colors', 'hold_api_credentials', 'hold_pricing_rules', 'hold_sync_log', 'hold_price_cache', 'hold_pending_items', 'hold_settings', 'hold_push_log'];
+    for (const key of keys) {
+      try {
+        const data = await blobRawGet(key);
+        await blobRawSet(key + '_backup_' + new Date().toISOString().replace(/[:.]/g, '-'), data);
+      } catch (e) { /* skip missing blobs */ }
+    }
+    res.json({ ok: true, backup: 'blob snapshots created' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// STARTUP LOG
 // ============================================================
 
 app.post('/api/scrape/brickeconomy', async (req, res) => {
