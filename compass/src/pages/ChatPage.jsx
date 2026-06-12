@@ -47,7 +47,7 @@ const suggestedPrompts = [
 const AI_API_ENDPOINT = API.chat;
 
 export default function ChatPage() {
-  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact, deleteEvent, events } = useStore();  const [input, setInput] = useState('');
+  const { chatHistory, addChatMessage, clearChatHistory, addEvent, addBook, addContact, deleteEvent, updateEvent, events } = useStore();  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -407,25 +407,41 @@ export default function ChatPage() {
         const delStart = del.start ? new Date(del.start).getTime() : null;
         const delWing = (del.wing || '').trim().toLowerCase();
 
-        // Match against current events by title + start time (within 2-minute tolerance)
+        // Match by title + start time (2-min tolerance).
+        // Wing matching: 'memory' matches events with wing='memory' OR 'both'
+        //               'assisted' matches events with wing='assisted' OR 'both'
         const matched = events.filter(e => {
           const titleMatch = (e.title || '').trim().toLowerCase() === delTitle;
           if (!titleMatch || !delStart) return false;
           const eventStart = new Date(e.start).getTime();
-          const withinTime = Math.abs(eventStart - delStart) < 120000; // 2 min
-          if (delWing) {
-            return withinTime && (e.wing || '').toLowerCase() === delWing;
-          }
-          return withinTime;
+          const withinTime = Math.abs(eventStart - delStart) < 300000; // 5 min
+          if (!withinTime) return false;
+          if (!delWing) return true; // no wing filter — match any
+          const eventWing = (e.wing || '').toLowerCase();
+          // Match exact wing OR 'both' (appears on both calendars)
+          return eventWing === delWing || eventWing === 'both';
         });
 
         matched.forEach(e => {
-          deleteEvent(e.id);
-          const wingLabel = e.wing === 'memory' ? 'Memory Care' : e.wing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
-          addChatMessage({
-            role: 'assistant',
-            message: `🗑️ **Deleted!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} has been removed from the **${wingLabel}** calendar.`
-          });
+          const eventWing = (e.wing || '').toLowerCase();
+          // If event is on BOTH calendars, move it to the OTHER calendar instead of deleting
+          if (eventWing === 'both' && delWing) {
+            const newWing = delWing === 'memory' ? 'assisted' : 'memory';
+            updateEvent(e.id, { wing: newWing });
+            const newLabel = newWing === 'memory' ? 'Memory Care' : 'Assisted Living';
+            const removedLabel = delWing === 'memory' ? 'Memory Care' : 'Assisted Living';
+            addChatMessage({
+              role: 'assistant',
+              message: `🔄 **Updated!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} moved from **${removedLabel}** to **${newLabel}** only.`
+            });
+          } else {
+            deleteEvent(e.id);
+            const wingLabel = eventWing === 'memory' ? 'Memory Care' : eventWing === 'assisted' ? 'Assisted Living' : 'Both Calendars';
+            addChatMessage({
+              role: 'assistant',
+              message: `🗑️ **Deleted!** "${e.title}" on ${new Date(e.start).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} has been removed from the **${wingLabel}** calendar.`
+            });
+          }
         });
 
         if (matched.length === 0 && delTitle) {
