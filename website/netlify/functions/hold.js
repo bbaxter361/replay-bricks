@@ -2136,37 +2136,113 @@ app.get('/api/picking', async (req, res) => {
 // PART-OUT
 // ============================================================
 
+function isValidSetNo(s) {
+  return /^\d{4,6}(-?\d+)?$/i.test(s);
+}
+function normalizeSetNo(setNo) {
+  const cleaned = setNo.replace(/[^a-zA-Z0-9-]/g, '').trim();
+  return cleaned.includes('-') ? cleaned : cleaned + '-1';
+}
+
 app.post('/api/partout/:setNo', async (req, res) => {
   try {
     const creds = await getCredentials();
     if (!creds.bricklink) return res.status(400).json({ error: 'BrickLink not configured' });
-    const setNo = req.params.setNo.includes('-') ? req.params.setNo : req.params.setNo + '-1';
-    const { condition = 'USED', include_prices = true } = req.body || {};
 
-    const subsets = await blRequest(creds.bricklink, 'GET', '/items/SET/' + setNo + '/subsets', { break_minifigs: 'false' });
-    if (!Array.isArray(subsets)) return res.status(404).json({ error: 'No inventory found for set ' + setNo });
+    if (!isValidSetNo(req.params.setNo)) {
+      return res.status(400).json({ error: 'Invalid set number. Use format like "21318" or "10255-1".' });
+    }
+    const setNo = normalizeSetNo(req.params.setNo);
+    const { condition = 'USED', include_prices = true, completeness = null } = req.body || {};
 
-    const parts = [];
+    if (completeness && !['sealed','complete','incomplete'].includes(completeness)) {
+      return res.status(400).json({ error: 'completeness must be: sealed, complete, or incomplete' });
+    }
+
+    // Fetch set metadata (name, image)
+    let setName = null, setImage = null, setYear = null;
+    try {
+      const setMeta = await blRequest(creds.bricklink, 'GET', '/items/SET/' + setNo);
+      if (setMeta) {
+        setName = setMeta.name || null;
+        setImage = setMeta.image_url || null;
+        setYear = setMeta.year_released || null;
+      }
+    } catch {}
+
+    const subsets = await blRequest(creds.bricklink, 'GET', '/items/SET/' + setNo + '/subsets', { break_minifigs: 'true' });
+    if (!Array.isArray(subsets)) return res.status(404).json({ error: 'No inventory found for set ' + setNo + '. Check the set number and try again.' });
+
+    // Color lookup
+    const colors = await blobRawGet('hold_bl_colors');
+    const colorMap = new Map(colors.map(c => [c.color_id, { name: c.color_name, code: c.color_code }]));
+
+    let parts = [], totalPieces = 0, minifigCount = 0;
+
     for (const subset of subsets) {
+      const isMinifig = subset.match_no > 0;
       for (const entry of (subset.entries || [])) {
         const item = entry.item || {};
-        parts.push({
-          part_no: item.no || entry.part_no || '', color_id: entry.color_id || null,
-          color_name: entry.color_name || '', part_name: item.name || entry.part_name || '',
-          quantity: entry.quantity || 0, condition,
-        });
+        const colorId = entry.color_id ?? null;
+        const colorInfo = colorMap.get(colorId);
+
+        const part = {
+          part_no: item.no || entry.part_no || '',
+          part_name: item.name || entry.part_name || '',
+          item_type: item.type || 'PART',
+          color_id: colorId,
+          color_name: colorInfo?.name || entry.color_name || null,
+          color_code: colorInfo?.code || null,
+          quantity: entry.quantity || 0,
+          extra: !!entry.is_extra,
+          alternate: !!entry.is_alternate || !!entry.is_counterpart,
+          minifig_set: isMinifig ? 'Minifig ' + subset.match_no : null,
+          image_url: (item.no || entry.part_no)
+            ? 'https://img.bricklink.com/ItemImage/PN/' + (colorId || 0) + '/' + (item.no || entry.part_no) + '.png'
+            : null,
+        };
+
+        if (part.item_type === 'MINIFIG') minifigCount++;
+        totalPieces += part.quantity;
+        parts.push(part);
       }
     }
+
+    const regularParts = parts.filter(p => !p.extra && !p.alternate);
+    const extraParts = parts.filter(p => p.extra);
+    const alternateParts = parts.filter(p => p.alternate);
 
     if (include_prices) {
       const priceCache = await blobRawGet('hold_price_cache');
-      for (const p of parts) {
-        const cached = priceCache.find(pc => pc.part_no === p.part_no && (pc.color_id === p.color_id || pc.color_id == null) && pc.condition === condition);
-        p.cached_avg_price_cents = cached?.avg_price_cents ?? null;
+      const priceMap = new Map();
+      for (const pc of priceCache) {
+        if (pc.condition === condition) {
+          priceMap.set(pc.part_no + '|' + (pc.color_id || 0), pc);
+        }
       }
+
+      const attachPrice = (p) => {
+        const key = p.part_no + '|' + (p.color_id || 0);
+        const cached = priceMap.get(key);
+        if (cached) {
+          p.avg_price_cents = cached.avg_price_cents;
+          p.min_price_cents = cached.min_price_cents;
+          p.max_price_cents = cached.max_price_cents;
+          p.qty_available = cached.qty_available;
+        }
+      };
+      regularParts.forEach(attachPrice);
+      extraParts.forEach(attachPrice);
+      alternateParts.forEach(attachPrice);
     }
 
-    res.json({ set_no: setNo, total_lots: parts.length, total_pieces: parts.reduce((s, p) => s + p.quantity, 0), parts });
+    res.json({
+      set_no: setNo, set_name: setName, set_image: setImage, set_year: setYear,
+      completeness,
+      total_lots: parts.length, total_pieces: totalPieces, minifig_count: minifigCount,
+      regular_parts: regularParts, extras: extraParts, alternates: alternateParts,
+      parts,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

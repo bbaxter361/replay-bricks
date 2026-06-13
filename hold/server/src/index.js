@@ -953,7 +953,7 @@ app.get('/api/settings', (req, res) => {
 });
 
 app.put('/api/settings', (req, res) => {
-  const allowed = ['push_mode', 'sync_interval_min', 'auto_sync_enabled', 'backup_keep_days'];
+  const allowed = ['push_mode', 'sync_interval_min', 'auto_sync_enabled', 'backup_keep_days', 'partout_default_condition', 'partout_auto_price'];
   const updated = {};
   for (const [k, v] of Object.entries(req.body || {})) {
     if (allowed.includes(k)) {
@@ -1016,6 +1016,18 @@ app.get('/api/picking', (req, res) => {
 
 // ========== PART-OUT ==========
 
+// Validate set number format before hitting the API
+function isValidSetNo(s) {
+  return /^\d{4,6}(-?\d+)?$/i.test(s);
+}
+
+// Normalize set number to BrickLink format (adds -1 suffix if missing)
+function normalizeSetNo(s) {
+  const cleaned = s.replace(/[^a-zA-Z0-9-]/g, '').trim();
+  if (cleaned.includes('-')) return cleaned;
+  return `${cleaned}-1`;
+}
+
 // Pull a set's full part inventory from BrickLink + price guide, ready to
 // review and push into pending items.
 app.post('/api/partout/:setNo', async (req, res) => {
@@ -1023,46 +1035,182 @@ app.post('/api/partout/:setNo', async (req, res) => {
     return res.status(400).json({ error: 'BrickLink not configured' });
   }
 
-  const setNo = req.params.setNo.includes('-') ? req.params.setNo : `${req.params.setNo}-1`;
-  const { condition = 'USED', include_prices = true } = req.body || {};
+  const setNo = normalizeSetNo(req.params.setNo);
+  if (!isValidSetNo(req.params.setNo)) {
+    return res.status(400).json({ error: 'Invalid set number. Use format like "21318" or "10255-1".' });
+  }
+
+  const { 
+    condition = 'USED', 
+    include_prices = true,
+    completeness = null  // 'sealed', 'complete', 'incomplete', null = skip
+  } = req.body || {};
+
+  // Validate completeness if provided
+  if (completeness && !['sealed','complete','incomplete'].includes(completeness)) {
+    return res.status(400).json({ error: 'completeness must be: sealed, complete, or incomplete' });
+  }
 
   try {
-    const subsets = await sync.blClient.getItemSubsets('SET', setNo, null, { break_minifigs: false });
-    if (!Array.isArray(subsets)) {
-      return res.status(404).json({ error: `No inventory found for set ${setNo}` });
+    // Fetch set metadata (name, image, year)
+    let setName = null, setImage = null, setYear = null;
+    try {
+      const setMeta = await sync.blClient.getItem('SET', setNo);
+      if (setMeta) {
+        setName = setMeta.name || null;
+        setImage = setMeta.image_url || null;
+        setYear = setMeta.year_released || null;
+      }
+    } catch (metaErr) {
+      // Non-critical — continue without metadata
+      console.warn(`Set metadata fetch failed for ${setNo}:`, metaErr.message);
     }
 
-    const parts = [];
+    // Fetch inventory with minifigs broken out
+    const subsets = await sync.blClient.getItemSubsets('SET', setNo, null, { break_minifigs: true });
+    if (!Array.isArray(subsets)) {
+      return res.status(404).json({ error: `No inventory found for set ${setNo}. Check the set number and try again.` });
+    }
+
+    // Build color name lookup
+    const colors = db.prepare('SELECT color_id, color_name, color_code FROM bl_colors').all();
+    const colorMap = new Map(colors.map(c => [c.color_id, { name: c.color_name, code: c.color_code }]));
+
+    let parts = [];
+    let totalPieces = 0;
+    let minifigCount = 0;
+
     for (const subset of subsets) {
+      const isMinifig = (subset.match_no > 0);
+      
       for (const entry of subset.entries || []) {
         const item = entry.item || {};
-        parts.push({
+        const colorId = entry.color_id ?? null;
+        const colorInfo = colorMap.get(colorId);
+        
+        const part = {
           part_no: item.no,
           part_name: item.name,
           item_type: item.type,
-          color_id: entry.color_id ?? null,
+          color_id: colorId,
+          color_name: colorInfo?.name || null,
+          color_code: colorInfo?.code || null,
           quantity: entry.quantity || 0,
           extra: !!entry.is_extra,
-          image_url: entry.color_id
-            ? `https://img.bricklink.com/ItemImage/PN/${entry.color_id}/${item.no}.png`
-            : `https://img.bricklink.com/ItemImage/PN/0/${item.no}.png`,
+          alternate: !!entry.is_alternate || !!entry.is_counterpart,
+          minifig_set: isMinifig ? `Minifig ${subset.match_no}` : null,
+          image_url: item.no
+            ? `https://img.bricklink.com/ItemImage/PN/${colorId || 0}/${item.no}.png`
+            : null,
+        };
+        
+        if (part.item_type === 'MINIFIG') minifigCount++;
+        totalPieces += part.quantity;
+        parts.push(part);
+      }
+    }
+
+    // Separate regular parts, extras, alternates
+    const regularParts = parts.filter(p => !p.extra && !p.alternate);
+    const extraParts = parts.filter(p => p.extra);
+    const alternateParts = parts.filter(p => p.alternate);
+
+    // Optionally price parts from price guide
+    if (include_prices && regularParts.length > 0) {
+      // Price up to 200 parts to avoid rate limits
+      const partsToPrice = regularParts.slice(0, 200);
+      const priceMap = new Map();
+
+      // Use cached prices first
+      const cachedPrices = db.prepare(`
+        SELECT part_no, color_id, avg_price_cents, min_price_cents, max_price_cents, qty_available
+        FROM price_cache WHERE condition = ?
+      `).all(condition);
+      for (const p of cachedPrices) {
+        priceMap.set(`${p.part_no}|${p.color_id}`, {
+          avg: p.avg_price_cents,
+          min: p.min_price_cents,
+          max: p.max_price_cents,
+          qty_avail: p.qty_available,
         });
       }
-    }
 
-    // Optionally price the first N parts from cached data (full pricing happens on confirm)
-    if (include_prices) {
-      const cachedPrices = db.prepare(`
-        SELECT part_no, color_id, avg_price_cents FROM price_cache WHERE condition = ?
-      `).all(condition);
-      const priceMap = new Map(cachedPrices.map(p => [`${p.part_no}|${p.color_id}`, p.avg_price_cents]));
-      for (const p of parts) {
-        p.cached_avg_price_cents = priceMap.get(`${p.part_no}|${p.color_id}`) ?? null;
+      // For unpriced parts, fetch from BrickLink price guide in batches
+      const unpriced = partsToPrice.filter(p => !priceMap.has(`${p.part_no}|${p.color_id}`));
+      if (unpriced.length > 0) {
+        for (const p of unpriced) {
+          try {
+            const guide = await sync.blClient.getItemPriceGuide(
+              p.item_type === 'MINIFIG' ? 'MINIFIG' : 'PART',
+              p.part_no,
+              p.color_id,
+              { guide_type: 'sold', condition }
+            );
+            if (guide) {
+              priceMap.set(`${p.part_no}|${p.color_id}`, {
+                avg: guide.avg_price ? Math.round(parseFloat(guide.avg_price) * 100) : null,
+                min: guide.min_price ? Math.round(parseFloat(guide.min_price) * 100) : null,
+                max: guide.max_price ? Math.round(parseFloat(guide.max_price) * 100) : null,
+                qty_avail: guide.qty_avg_price || guide.total_quantity || null,
+              });
+              // Cache it for future lookups
+              if (guide.avg_price) {
+                db.prepare(`
+                  INSERT INTO price_cache (part_no, color_id, source, avg_price_cents, min_price_cents, max_price_cents, qty_available, condition)
+                  VALUES (?, ?, 'bricklink', ?, ?, ?, ?, ?)
+                  ON CONFLICT(part_no, color_id, source, condition) DO UPDATE SET
+                    avg_price_cents = excluded.avg_price_cents,
+                    min_price_cents = excluded.min_price_cents,
+                    max_price_cents = excluded.max_price_cents,
+                    qty_available = excluded.qty_available,
+                    cached_at = datetime('now')
+                `).run(
+                  p.part_no, p.color_id,
+                  Math.round(parseFloat(guide.avg_price) * 100),
+                  guide.min_price ? Math.round(parseFloat(guide.min_price) * 100) : null,
+                  guide.max_price ? Math.round(parseFloat(guide.max_price) * 100) : null,
+                  guide.qty_avg_price || guide.total_quantity || null,
+                  condition
+                );
+              }
+            }
+          } catch (priceErr) {
+            // Skip individual pricing failures
+          }
+        }
       }
+
+      // Attach prices to parts
+      const attachPrice = (p) => {
+        const priceInfo = priceMap.get(`${p.part_no}|${p.color_id}`);
+        if (priceInfo) {
+          p.avg_price_cents = priceInfo.avg;
+          p.min_price_cents = priceInfo.min;
+          p.max_price_cents = priceInfo.max;
+          p.qty_available = priceInfo.qty_avail;
+        }
+      };
+      regularParts.forEach(attachPrice);
+      extraParts.forEach(attachPrice);
+      alternateParts.forEach(attachPrice);
     }
 
-    res.json({ set_no: setNo, total_lots: parts.length, total_pieces: parts.reduce((s, p) => s + p.quantity, 0), parts });
+    res.json({
+      set_no: setNo,
+      set_name: setName,
+      set_image: setImage,
+      set_year: setYear,
+      completeness,
+      total_lots: parts.length,
+      total_pieces: totalPieces,
+      minifig_count: minifigCount,
+      regular_parts: regularParts,
+      extras: extraParts,
+      alternates: alternateParts,
+      parts, // Flat list for backward compat
+    });
   } catch (err) {
+    console.error(`Part-out error for ${setNo}:`, err);
     res.status(500).json({ error: err.message });
   }
 });

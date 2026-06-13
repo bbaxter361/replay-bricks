@@ -237,6 +237,8 @@ function initSchema(db) {
     ['sync_interval_min', '10'],
     ['auto_sync_enabled', 'true'],
     ['backup_keep_days', '14'],
+    ['partout_default_condition', 'USED'],
+    ['partout_auto_price', 'true'],
   ];
   const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [k, v] of defaults) insSetting.run(k, v);
