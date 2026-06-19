@@ -104,7 +104,7 @@ function App() {
         />
         <Route
           path="/inventory"
-          element={<Redirect to="https://replaybrick.com/hold/" />}
+          element={<ExternalRedirect to="https://replaybrick.com/hold/" />}
         />
         <Route
           path="/compass"
