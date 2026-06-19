@@ -1,13 +1,15 @@
-// Spring v3.0 — Netlify Function
+// Spring v3.1 — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
 // Uses DeepSeek V4 Pro for production
 // v3.0: Upgraded to deepseek-v4-pro, added conversation memory, web search
+// v3.1: Added Brain Memory — durable extracted memories shared with Vicki & Amy
 
 import serverless from 'serverless-http';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import { getAllMemories, searchMemories, saveMemory, formatMemoriesForPrompt, buildExtractionPrompt } from './spring-brain.js';
 import path from 'path';
 import fs from 'fs';
 import { getStore } from '@netlify/blobs';
@@ -500,7 +502,7 @@ You are an expert in:
 - Keep responses concise for a busy Activities Director
 - If Amanda shares a photo, acknowledge it and offer to help describe what she can do with the items shown
 - You are powered by DeepSeek V4 Pro AI model — if asked about your model, mention this
-- You have a memory now! You can see recent conversation history and will naturally reference past chats. If Amanda mentions something you discussed before, show that you remember.
+- You have a brain memory system! The \"WHAT I REMEMBER ABOUT YOU\" section contains durable facts, preferences, and decisions extracted from our past conversations. These are permanent memories — reference them naturally. If Amanda mentions something you learned before, show that you remember.
 - When Amanda shares web links, you'll read the page content and use it to help her. If she asks you to search for something online, tell her to share a link and you'll look at it together.
 
 ## CALENDAR SYSTEM
@@ -851,6 +853,11 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
     // Load conversation memory (past chats with Amanda)
     const memoryContext = await getMemoryContext();
 
+    // Load relevant Brain memories (durable extracted memories)
+    const store = await getBlobStore();
+    const brainMemories = await searchMemories(store, message || '', 5);
+    const brainContext = formatMemoriesForPrompt(brainMemories);
+
     // Build the user message
     let fullMessage = '';
     if (docText && fileName) {
@@ -859,8 +866,9 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
       fullMessage = message + webContext;
     }
 
-    // Inject memory into system prompt
+    // Inject memory into system prompt (conversation history + brain memories)
     const systemPrompt = buildSpringSystemPrompt() + 
+      (brainContext ? `\n\n## WHAT I REMEMBER ABOUT YOU\n${brainContext}\n\nThese are things I've learned from our past conversations. Use this knowledge naturally.` : '') +
       (memoryContext ? `\n\n## RECENT CONVERSATION HISTORY\n${memoryContext}\n\nUse this context to maintain continuity. Reference past conversations naturally when relevant.` : '');
 
     const reply = await callAI(systemPrompt, fullMessage, image, history);
@@ -1269,16 +1277,92 @@ app.post('/api/canva/autofill', apiKeyAuth, async (req, res) => {
   }
 });
 
+// ── Brain Memory Extraction ──
+// Extracts durable memories from recent conversations.
+// Call this after a meaningful conversation to persist what was learned.
+app.post('/api/brain/extract', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+    
+    // Get recent conversation memory (last 20 turns)
+    let history;
+    if (store instanceof Map) {
+      const raw = store.get(MEMORY_KEY);
+      history = raw ? JSON.parse(raw) : [];
+    } else {
+      history = await store.get(MEMORY_KEY, { type: 'json' }) || [];
+    }
+    
+    if (!history.length) {
+      return res.json({ extracted: 0, message: 'No conversation history to extract from.' });
+    }
+
+    // Take last 20 turns for context
+    const recent = history.slice(-20);
+    const conversationText = recent.map(t => 
+      `${t.role === 'user' ? 'Amanda' : 'Spring'}: ${(t.content || t.message || '').substring(0, 1000)}`
+    ).join('\n');
+
+    // Call LLM to extract memories
+    const extractionPrompt = buildExtractionPrompt(conversationText);
+    const rawResponse = await callAI(
+      'You are a memory extraction system. Output ONLY valid JSON objects, one per line. No other text.',
+      extractionPrompt,
+      null,
+      []
+    );
+
+    // Parse the JSON lines from the response
+    const lines = rawResponse.split('\n').filter(l => l.trim().startsWith('{'));
+    let saved = 0;
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line.trim());
+        if (parsed.topic && parsed.principle) {
+          const result = await saveMemory(store, {
+            topic: parsed.topic,
+            principle: parsed.principle,
+            signal: parsed.signal || 'positive',
+            source: 'spring-extraction',
+            agent: 'spring',
+            metadata: { extracted_from_turns: recent.length }
+          });
+          if (result.saved) saved++;
+        }
+      } catch (parseErr) {
+        // Skip invalid JSON lines
+      }
+    }
+
+    res.json({ extracted: saved, message: `Extracted ${saved} memories from ${recent.length} conversation turns.` });
+  } catch (err) {
+    console.error('Brain extraction error:', err);
+    res.status(500).json({ error: 'Extraction failed', details: err.message });
+  }
+});
+
+// ── Brain Memory Search (debug/status) ──
+app.get('/api/brain/memories', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+    const memories = await getAllMemories(store);
+    res.json({ count: memories.length, memories: memories.slice(-50) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Health check ──
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Spring (Netlify)',
-    version: '3.0.0',
+    version: '3.1.0',
     model: DEEPSEEK_MODEL,
     blobs: true,
     blobStoreMode,
     blobStoreError: blobStoreError || null,
+    brain: true,
   });
 });
 
