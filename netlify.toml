@@ -18,6 +18,13 @@
   timeout = 90
   memory = 2048
 
+[functions.hold]
+  timeout = 120
+  memory = 1024
+
+[functions."hold-scheduled"]
+  schedule = "*/15 * * * *"
+
 # ── Security Headers ──
 [[headers]]
   for = "/hold/*"

@@ -210,13 +210,13 @@ export default function ChatPage() {
         title: parsedBook.title || 'Untitled',
         author: parsedBook.author || 'Unknown',
         pages: parsedBook.pages || 0,
-        dateRead: new Date().toISOString(),
+        dateRead: parsedBook.dateRead ? new Date(parsedBook.dateRead + 'T12:00:00').toISOString() : new Date().toISOString(),
         addedBy: 'Spring'
       };
       addBook(bookToAdd);
       addChatMessage({
         role: 'assistant',
-        message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}. Check your Books page to see your reading stats! 📚`
+        message: `✅ **Added to your book list!** "${parsedBook.title}"${parsedBook.author ? ` by ${parsedBook.author}` : ''}${parsedBook.pages ? ` (${parsedBook.pages} pages)` : ''}${parsedBook.dateRead ? ` — read on ${new Date(parsedBook.dateRead + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}. Check your Books page to see your reading stats! 📚`
       });
     });
 

@@ -688,6 +688,43 @@ async function syncBLOrders() {
           }
           
           count++;
+          
+          // Fetch and store order items for this BrickLink order
+          const orderRow = (() => {
+            // Use existing if we already read it, otherwise refetch
+            if (existing) return existing;
+            return null;
+          })();
+          const orderId_db = existing ? existing.id : null;
+          if (orderId_db) {
+            try {
+              const itemsResult = await blApiGet(`/orders/${orderId}/items`);
+              const items = Array.isArray(itemsResult) 
+                ? itemsResult.flatMap(b => Array.isArray(b) ? b : [b]) 
+                : [];
+              for (const item of items) {
+                const ie = item.item || item;
+                await blobInsert('hold_order_items', {
+                  order_id: orderId_db,
+                  marketplace: 'bricklink',
+                  inventory_id: ie.inventory_id || null,
+                  item_type: ie.type || 'PART',
+                  item_no: ie.no || '',
+                  item_name: ie.name || '',
+                  color_id: ie.color_id || null,
+                  color_name: ie.color_name || '',
+                  condition: (ie.new_or_used || 'U') === 'N' ? 'NEW' : 'USED',
+                  quantity: parseInt(ie.quantity || item.quantity || 1),
+                  unit_price_cents: ie.unit_price ? Math.round(parseFloat(ie.unit_price) * 100) : 0,
+                  remarks: ie.remarks || '',
+                  bl_item_id: ie.item_id || null,
+                  last_synced_at: new Date().toISOString(),
+                });
+              }
+            } catch (itemErr) {
+              console.error(`Items fetch failed for BL ${orderId}:`, itemErr.message);
+            }
+          }
         } catch (err) {
           errors.push(`Order ${order.order_id}: ${err.message}`);
         }
@@ -2393,8 +2430,40 @@ app.get('/api/scheduler/status', async (req, res) => {
 });
 
 app.post('/api/scheduler/tick', async (req, res) => {
-  // Manual trigger for sync + reconcile (serverless — no cron, client-driven)
-  res.json({ ok: true, message: 'Scheduler tick queued. Use /api/sync/all/all to sync, /api/reconcile to reconcile.' });
+  // Cron endpoint — triggers all syncs, checks for new orders
+  // Designed to be called by external cron service (cron-job.org, GitHub Actions, etc.)
+  const results = {};
+  const errors = [];
+  
+  try {
+    // Run all four syncs in parallel
+    const syncs = await Promise.allSettled([
+      syncBLOrders().then(r => { results.bl_orders = r; }).catch(e => { errors.push(`BL orders: ${e.message}`); }),
+      syncBLInventory().then(r => { results.bl_inventory = r; }).catch(e => { errors.push(`BL inventory: ${e.message}`); }),
+      syncBOOrders().then(r => { results.bo_orders = r; }).catch(e => { errors.push(`BO orders: ${e.message}`); }),
+      syncBOInventory().then(r => { results.bo_inventory = r; }).catch(e => { errors.push(`BO inventory: ${e.message}`); }),
+    ]);
+    
+    // Check for new orders vs last-seen state
+    try {
+      const stateBlob = await blobRawGet('hold_cron_state').catch(() => ({}));
+      const lastIds = stateBlob.lastOrderIds || [];
+      const orders = await blobRawGet('hold_orders');
+      const knownIds = new Set(lastIds);
+      const newOrders = orders.filter(o => !knownIds.has(o.id));
+      
+      results.new_orders = newOrders.length;
+      results.order_ids = newOrders.map(o => `${o.marketplace}:${o.order_id}`);
+      
+      await blobSet('hold_cron_state', { lastOrderIds: orders.map(o => o.id), lastRun: new Date().toISOString() });
+    } catch (e) {
+      errors.push(`State tracking: ${e.message}`);
+    }
+    
+    res.json({ ok: true, results, errors: errors.length ? errors : undefined });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/scheduler/backup', async (req, res) => {

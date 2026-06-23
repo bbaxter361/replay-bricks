@@ -22,7 +22,7 @@ function formatDate(isoStr) {
 export default function BooksPage() {
   const { books, addBook, removeBook, getBooksTally } = useStore();
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ title: '', author: '', pages: '' });
+  const [formData, setFormData] = useState({ title: '', author: '', pages: '', dateRead: new Date().toISOString().split('T')[0] });
 
   const tally = getBooksTally();
 
@@ -34,11 +34,11 @@ export default function BooksPage() {
       title: formData.title.trim(),
       author: formData.author.trim(),
       pages: parseInt(formData.pages, 10) || 0,
-      dateRead: new Date().toISOString(),
+      dateRead: formData.dateRead ? new Date(formData.dateRead + 'T12:00:00').toISOString() : new Date().toISOString(),
       addedBy: 'Amanda'
     });
 
-    setFormData({ title: '', author: '', pages: '' });
+    setFormData({ title: '', author: '', pages: '', dateRead: new Date().toISOString().split('T')[0] });
     setShowForm(false);
   };
 
@@ -144,6 +144,15 @@ export default function BooksPage() {
                   placeholder="722"
                   min="1"
                   className="w-full px-3 py-2 border border-violet-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 bg-violet-50 text-gray-900 placeholder:text-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date Read</label>
+                <input
+                  type="date"
+                  value={formData.dateRead}
+                  onChange={(e) => setFormData({ ...formData, dateRead: e.target.value })}
+                  className="w-full px-3 py-2 border border-violet-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 bg-violet-50 text-gray-900"
                 />
               </div>
               <div className="flex gap-2 pt-2">

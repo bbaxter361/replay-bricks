@@ -36,6 +36,27 @@ export default function PortalPage({ user, onLogout }) {
       ],
     },
     {
+      name: 'Collections',
+      apps: [
+        {
+          id: 'starwars',
+          title: 'Star Wars Figure Tracker',
+          subtitle: 'Vintage Kenner Collection',
+          description: 'Track your vintage Kenner Star Wars action figure collection — catalog, want/have lists, current eBay prices, and price history.',
+          icon: (
+            <svg viewBox="0 0 80 80" className="w-16 h-16" fill="none">
+              <circle cx="40" cy="40" r="32" stroke="#FFE81F" strokeWidth="2" opacity="0.5"/>
+              <text x="40" y="38" textAnchor="middle" fill="#FFE81F" fontSize="24" fontWeight="bold" fontFamily="sans-serif">★</text>
+              <path d="M40 48 L44 56 L52 56 L46 62 L48 70 L40 66 L32 70 L34 62 L28 56 L36 56 Z" fill="#FFE81F" opacity="0.8"/>
+            </svg>
+          ),
+          route: 'https://fabulous-chimera-1783ac.netlify.app/',
+          external: true,
+          color: '#FFE81F',
+        },
+      ],
+    },
+    {
       name: 'Spring Creek',
       apps: [
         {

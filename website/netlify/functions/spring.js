@@ -532,11 +532,13 @@ When Amanda asks you to delete or remove events from the calendar:
 - SMART BEHAVIOR: If an event is on BOTH calendars (wing=both) and Amanda asks to delete it from just one, the app will automatically move it to the other calendar instead of fully deleting. You still emit DELETE_EVENT — the frontend handles the rest. In your message, say something like "I'll remove it from the Memory Care calendar — it'll stay on Assisted Living."
 
 ## BOOK LIST SYSTEM
-Amanda tracks books she has read. Each book has title, author, and page count. She can add books directly or ask you to add them.
+Amanda tracks books she has read. Each book has title, author, page count, and optional date read. She can add books directly or ask you to add them.
 - When adding a book, append an ===BOOK=== JSON block:
 ===BOOK===
-{"title": "Book Title", "author": "Author Name", "pages": 250}
+{"title": "Book Title", "author": "Author Name", "pages": 250, "dateRead": "2026-06-22"}
 ===END===
+- The dateRead field is optional — use ISO date format (YYYY-MM-DD). If Amanda doesn't specify when she read it, leave dateRead out and it will default to today.
+- If Amanda says things like "I read it last week" or "last Tuesday," infer the correct date and include it.
 - She can ask things like "Spring, add The Great Gatsby by F. Scott Fitzgerald to my book list, 180 pages"
 - She may ask about her reading stats - reference the Books page in the app
 
@@ -568,6 +570,88 @@ Amanda tracks contacts for residents, family members, doctors, and staff. Each c
 {"name": "Jane Smith", "phone": "(555) 123-4567", "email": "jane@example.com", "relationship": "doctor", "company": "City Medical", "title": "Neurologist", "notes": "Specializes in dementia care"}
 ===END===
 - You can also suggest adding tags like "memory-care", "specialist", etc.`;
+
+// ── Calendar events context injected into Spring's system prompt ──
+// Fetches all events from blob storage, groups by wing, formats for the prompt.
+async function getCalendarContext() {
+  try {
+    const store = await getBlobStore();
+    let events;
+    if (store instanceof Map) {
+      const raw = store.get('events');
+      events = raw ? JSON.parse(raw) : [];
+    } else {
+      events = await store.get('events', { type: 'json' }) || [];
+    }
+    if (!Array.isArray(events) || events.length === 0) return '';
+
+    // Sort by start date
+    const sorted = [...events].sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+    // Group by wing
+    const byWing = { both: [], assisted: [], memory: [] };
+    for (const e of sorted) {
+      const wing = e.wing || 'both';
+      if (byWing[wing]) byWing[wing].push(e);
+    }
+
+    const formatEvent = (e) => {
+      const start = e.start || '';
+      // Parse ISO date to readable: "Mon 7/6, 10:00 AM"
+      let display = start;
+      try {
+        const d = new Date(start + (start.includes('Z') ? '' : ''));
+        if (!isNaN(d.getTime())) {
+          const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const day = dayNames[d.getDay()];
+          const month = d.getMonth() + 1;
+          const date = d.getDate();
+          const hours = d.getHours();
+          const mins = d.getMinutes();
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          const h = hours % 12 || 12;
+          const time = mins > 0 ? `${h}:${String(mins).padStart(2, '0')} ${ampm}` : `${h}:00 ${ampm}`;
+          display = `${day} ${month}/${date}, ${time}`;
+        }
+      } catch {}
+      return `${display} — ${e.title || 'Untitled'}`;
+    };
+
+    let context = '\n\n## CURRENT CALENDAR EVENTS\n';
+    context += 'These events already exist in Amanda\'s Compass calendar. Use this to answer questions about what is scheduled, avoid suggesting conflicts, and know what events are on the calendar before creating or deleting.\n';
+
+    // Both wings (largest group usually)
+    if (byWing.both.length > 0) {
+      context += `\n**BOTH WINGS (${byWing.both.length} events):**\n`;
+      for (const e of byWing.both) {
+        context += `  • ${formatEvent(e)}\n`;
+      }
+    }
+    if (byWing.assisted.length > 0) {
+      context += `\n**ASSISTED LIVING (${byWing.assisted.length} events):**\n`;
+      for (const e of byWing.assisted) {
+        context += `  • ${formatEvent(e)}\n`;
+      }
+    }
+    if (byWing.memory.length > 0) {
+      context += `\n**MEMORY CARE (${byWing.memory.length} events):**\n`;
+      for (const e of byWing.memory) {
+        context += `  • ${formatEvent(e)}\n`;
+      }
+    }
+
+    // Cap total to prevent token bloat with very large calendars
+    const MAX_LEN = 8000;
+    if (context.length > MAX_LEN) {
+      context = context.substring(0, MAX_LEN) + '\n... (calendar truncated, showing earliest events)\n';
+    }
+
+    return context;
+  } catch (e) {
+    console.warn('Calendar context read failed:', e.message);
+    return '';
+  }
+}
 
 export function buildSpringSystemPrompt(now = new Date()) {
   return `${BASE_SYSTEM}
@@ -866,8 +950,10 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
       fullMessage = message + webContext;
     }
 
-    // Inject memory into system prompt (conversation history + brain memories)
+    // Inject memory + calendar events into system prompt
+    const calendarContext = await getCalendarContext();
     const systemPrompt = buildSpringSystemPrompt() + 
+      (calendarContext ? calendarContext : '') +
       (brainContext ? `\n\n## WHAT I REMEMBER ABOUT YOU\n${brainContext}\n\nThese are things I've learned from our past conversations. Use this knowledge naturally.` : '') +
       (memoryContext ? `\n\n## RECENT CONVERSATION HISTORY\n${memoryContext}\n\nUse this context to maintain continuity. Reference past conversations naturally when relevant.` : '');
 
