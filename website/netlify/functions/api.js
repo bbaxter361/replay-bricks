@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import os from 'os';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.join(__dirname, 'data', 'inventory.json');
-const ORDERS_FILE = path.join(__dirname, 'data', 'orders.json');
-const SHIPPING_FILE = path.join(__dirname, 'data', 'shipping.json');
+// Use /tmp for persistent storage across function invocations on Netlify
+const DATA_DIR = path.join(os.tmpdir(), 'hold-data');
+const DATA_FILE = path.join(DATA_DIR, 'inventory.json');
+const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const SHIPPING_FILE = path.join(DATA_DIR, 'shipping.json');
 
 function loadInventory() {
   try {
