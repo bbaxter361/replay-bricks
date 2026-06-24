@@ -54,7 +54,17 @@
 # Hold inventory API (more specific — must come BEFORE Spring catch-all)
 [[redirects]]
   from = "/api/hold/*"
-  to = "/.netlify/functions/hold"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/api/inventory"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/api/orders"
+  to = "/.netlify/functions/api"
   status = 200
 
 # Spring API (Compass/chat — catches all other /api/*)
