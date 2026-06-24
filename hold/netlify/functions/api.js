@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(__dirname, 'data', 'inventory.json');
 const ORDERS_FILE = path.join(__dirname, 'data', 'orders.json');
+const SHIPPING_FILE = path.join(__dirname, 'data', 'shipping.json');
 
 function loadInventory() {
   try {
@@ -36,6 +37,26 @@ function loadOrders() {
 function saveOrders(orders) {
   fs.mkdirSync(path.dirname(ORDERS_FILE), { recursive: true });
   fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+}
+
+function loadShipping() {
+  try {
+    const raw = fs.readFileSync(SHIPPING_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
+function saveShipping(records) {
+  fs.mkdirSync(path.dirname(SHIPPING_FILE), { recursive: true });
+  fs.writeFileSync(SHIPPING_FILE, JSON.stringify(records, null, 2));
+}
+
+function matchKey(item) {
+  return `${item.part_no}::${item.color_id ?? ''}`;
 }
 
 function nextId(items) {
@@ -215,6 +236,82 @@ router.delete('/api/orders/:id', (req) => {
   const [removed] = orders.splice(idx, 1);
   saveOrders(orders);
   return { status: 200, body: { ok: true, removed } };
+});
+
+router.post('/api/sync', (req) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.items)) {
+    return { status: 400, body: { error: 'items array required' } };
+  }
+  const items = loadInventory();
+  const index = new Map(items.map((it, i) => [matchKey(it), i]));
+  const now = new Date().toISOString();
+  let added = 0;
+  let updated = 0;
+  for (const incoming of body.items) {
+    if (!incoming || !incoming.part_no) continue;
+    const key = matchKey(incoming);
+    const editable = [
+      'part_no', 'part_name', 'color_id', 'color_name',
+      'quantity', 'condition', 'location', 'unit_price_cents', 'notes',
+    ];
+    if (index.has(key)) {
+      const idx = index.get(key);
+      for (const k of editable) {
+        if (incoming[k] !== undefined) items[idx][k] = incoming[k];
+      }
+      items[idx].updated_at = now;
+      updated++;
+    } else {
+      const item = {
+        id: nextId(items),
+        part_no: incoming.part_no,
+        part_name: incoming.part_name || '',
+        color_id: incoming.color_id ?? null,
+        color_name: incoming.color_name || null,
+        quantity: incoming.quantity ?? 1,
+        condition: incoming.condition || 'USED',
+        location: incoming.location || null,
+        unit_price_cents: incoming.unit_price_cents ?? null,
+        notes: incoming.notes || null,
+        created_at: now,
+        updated_at: now,
+      };
+      items.push(item);
+      index.set(key, items.length - 1);
+      added++;
+    }
+  }
+  saveInventory(items);
+  return { status: 200, body: { added, updated, total: items.length } };
+});
+
+router.post('/api/shipping', (req) => {
+  const body = req.body || {};
+  if (body.order_id == null) return { status: 400, body: { error: 'order_id required' } };
+  const weight = Number(body.weight_oz);
+  if (!Number.isFinite(weight) || weight <= 0) {
+    return { status: 400, body: { error: 'weight_oz must be a positive number' } };
+  }
+  if (!body.package_type) return { status: 400, body: { error: 'package_type required' } };
+  const orders = loadOrders();
+  const order = orders.find((o) => String(o.id) === String(body.order_id));
+  if (!order) return { status: 404, body: { error: 'order not found' } };
+  const records = loadShipping();
+  const now = new Date().toISOString();
+  const record = {
+    id: nextId(records),
+    order_id: body.order_id,
+    weight_oz: weight,
+    package_type: body.package_type,
+    label_url: `https://placeholder.local/labels/${body.order_id}-${Date.now()}.pdf`,
+    carrier: null,
+    tracking_number: null,
+    created_at: now,
+  };
+  records.push(record);
+  saveShipping(records);
+  return { status: 201, body: record };
 });
 
 const CORS = {
