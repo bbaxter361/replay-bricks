@@ -58,12 +58,17 @@
   status = 200
 
 [[redirects]]
-  from = "/api/inventory"
+  from = "/api/inventory/*"
   to = "/.netlify/functions/api"
   status = 200
 
 [[redirects]]
-  from = "/api/orders"
+  from = "/api/orders/*"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/api/sync"
   to = "/.netlify/functions/api"
   status = 200
 

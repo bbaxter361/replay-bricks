@@ -3,7 +3,7 @@
 // In development: uses local Express server
 const API_BASE = import.meta.env.DEV
   ? 'http://localhost:3002/api'
-  : 'https://replaybrick.com/api/hold';
+  : 'https://replaybrick.com/api';
 
 const TOKEN_KEY = 'hold_api_token';
 
