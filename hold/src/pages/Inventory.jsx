@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Grid3X3, List, RefreshCw, Package, ExternalLink, X, ZoomIn, TrendingUp, DollarSign } from 'lucide-react'
+import { Search, Plus, Grid3X3, List, RefreshCw, Package, ExternalLink, X, ZoomIn, TrendingUp, DollarSign, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '../api'
+
+const BLANK_NEW_ITEM = {
+  part_no: '',
+  color_id: '',
+  part_name: '',
+  quantity: 1,
+  condition: 'USED',
+  location: '',
+  unit_price_cents: '',
+}
 
 // Fallback icon for broken/missing images
 function PartThumbnail({ item }) {
@@ -37,6 +47,51 @@ export default function Inventory() {
   const [imageModal, setImageModal] = useState(null)
   const [prices, setPrices] = useState({})      // { [itemId]: { avg, min, max, loading } }
   const [refreshingAll, setRefreshingAll] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [newItem, setNewItem] = useState(BLANK_NEW_ITEM)
+  const [saving, setSaving] = useState(false)
+
+  const handleCreate = async (e) => {
+    e?.preventDefault?.()
+    if (!newItem.part_no.trim()) {
+      toast.error('Part # is required')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        part_no: newItem.part_no.trim(),
+        part_name: newItem.part_name.trim() || null,
+        color_id: newItem.color_id === '' ? null : parseInt(newItem.color_id),
+        quantity: parseInt(newItem.quantity) || 0,
+        condition: newItem.condition,
+        location: newItem.location.trim() || null,
+        unit_price_cents: newItem.unit_price_cents === ''
+          ? null
+          : Math.round(parseFloat(newItem.unit_price_cents) * 100),
+      }
+      await api.createInventoryItem(payload)
+      toast.success('Part added')
+      setNewItem(BLANK_NEW_ITEM)
+      setAddOpen(false)
+      await loadItems()
+    } catch (err) {
+      toast.error('Add failed: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (item) => {
+    if (!confirm(`Delete ${item.part_no}${item.color_name ? ' (' + item.color_name + ')' : ''}?`)) return
+    try {
+      await api.deleteInventoryItem(item.id)
+      toast.success('Deleted')
+      await loadItems()
+    } catch (err) {
+      toast.error('Delete failed: ' + err.message)
+    }
+  }
 
   const loadItems = async () => {
     setLoading(true)
@@ -123,6 +178,9 @@ export default function Inventory() {
           <p className="text-gray-400 text-sm mt-1">{total} unique parts · {totalQty} total pieces</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 bg-lego-red hover:bg-lego-red/90 text-white px-3 py-2 rounded-lg text-sm transition-colors">
+            <Plus className="w-4 h-4" /> Add Part
+          </button>
           <button onClick={loadItems} className="flex items-center gap-1.5 bg-dark-surface hover:bg-dark-border text-gray-300 px-3 py-2 rounded-lg text-sm border border-dark-border transition-colors">
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>
@@ -176,6 +234,7 @@ export default function Inventory() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Location</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Condition</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Mktpl</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-border">
@@ -239,6 +298,15 @@ export default function Inventory() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs text-gray-500">{item.marketplace_count || 0}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="text-gray-500 hover:text-red-400 cursor-pointer"
+                          title="Delete part"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -311,6 +379,116 @@ export default function Inventory() {
           ))}
         </div>
       )}
+      {/* ── Add Part Modal ── */}
+      {addOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => !saving && setAddOpen(false)}
+        >
+          <form
+            className="relative bg-[#0f0f1a] border border-dark-border rounded-2xl max-w-md w-full mx-4 shadow-2xl p-6 space-y-4"
+            onClick={e => e.stopPropagation()}
+            onSubmit={handleCreate}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Add Part</h3>
+              <button type="button" onClick={() => !saving && setAddOpen(false)} className="text-gray-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="col-span-2 text-xs text-gray-400">
+                Part # *
+                <input
+                  required
+                  autoFocus
+                  value={newItem.part_no}
+                  onChange={e => setNewItem({ ...newItem, part_no: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-lego-red"
+                  placeholder="3001"
+                />
+              </label>
+              <label className="col-span-2 text-xs text-gray-400">
+                Name
+                <input
+                  value={newItem.part_name}
+                  onChange={e => setNewItem({ ...newItem, part_name: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                  placeholder="Brick 2x4"
+                />
+              </label>
+              <label className="text-xs text-gray-400">
+                Color ID
+                <input
+                  type="number"
+                  value={newItem.color_id}
+                  onChange={e => setNewItem({ ...newItem, color_id: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                  placeholder="11 (Reddish Brown)"
+                />
+              </label>
+              <label className="text-xs text-gray-400">
+                Quantity
+                <input
+                  type="number"
+                  min="0"
+                  value={newItem.quantity}
+                  onChange={e => setNewItem({ ...newItem, quantity: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                />
+              </label>
+              <label className="text-xs text-gray-400">
+                Condition
+                <select
+                  value={newItem.condition}
+                  onChange={e => setNewItem({ ...newItem, condition: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                >
+                  <option value="USED">Used</option>
+                  <option value="NEW">New</option>
+                </select>
+              </label>
+              <label className="text-xs text-gray-400">
+                Price (USD)
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newItem.unit_price_cents}
+                  onChange={e => setNewItem({ ...newItem, unit_price_cents: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                  placeholder="0.25"
+                />
+              </label>
+              <label className="col-span-2 text-xs text-gray-400">
+                Location
+                <input
+                  value={newItem.location}
+                  onChange={e => setNewItem({ ...newItem, location: e.target.value })}
+                  className="mt-1 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-red"
+                  placeholder="Bin A3"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-dark-border">
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                disabled={saving}
+                className="px-3 py-2 text-sm text-gray-300 hover:text-white"
+              >Cancel</button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 text-sm bg-lego-red hover:bg-lego-red/90 text-white rounded-lg disabled:opacity-50"
+              >{saving ? 'Saving...' : 'Add Part'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ── Part Image Modal ── */}
       {imageModal && (
         <div

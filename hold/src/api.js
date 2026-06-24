@@ -66,11 +66,18 @@ export const api = {
     return request(`/inventory${qs ? '?' + qs : ''}`);
   },
   getInventoryItem: (id) => request(`/inventory/${id}`),
+  createInventoryItem: (data) =>
+    request('/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   updateInventoryItem: (id, data) =>
     request(`/inventory/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  deleteInventoryItem: (id) =>
+    request(`/inventory/${id}`, { method: 'DELETE' }),
 
   // Orders
   getOrders: (params = {}) => {

@@ -1243,6 +1243,82 @@ app.put('/api/inventory/:id', async (req, res) => {
   }
 });
 
+app.post('/api/inventory', async (req, res) => {
+  try {
+    const {
+      part_no,
+      color_id = null,
+      part_name = null,
+      part_category = null,
+      quantity = 0,
+      condition = 'USED',
+      location = null,
+      unit_price_cents = null,
+      purchase_price_cents = null,
+      notes = null,
+    } = req.body || {};
+
+    if (!part_no || typeof part_no !== 'string') {
+      return res.status(400).json({ error: 'part_no is required' });
+    }
+
+    const inventory = await blobRawGet('hold_inventory');
+    const dup = inventory.find(
+      i => i.part_no === part_no
+        && (i.color_id ?? null) === (color_id ?? null)
+        && (i.condition || 'USED') === condition
+    );
+    if (dup) {
+      return res.status(409).json({ error: 'Item already exists', id: dup.id });
+    }
+
+    const now = new Date().toISOString();
+    const item = await blobInsert('hold_inventory', {
+      part_no,
+      color_id: color_id === null ? null : parseInt(color_id),
+      part_name,
+      part_category,
+      quantity: parseInt(quantity) || 0,
+      condition,
+      location,
+      unit_price_cents: unit_price_cents === null ? null : parseInt(unit_price_cents),
+      purchase_price_cents: purchase_price_cents === null ? null : parseInt(purchase_price_cents),
+      notes,
+      created_at: now,
+      updated_at: now,
+    });
+
+    res.status(201).json({ ok: true, item });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/inventory/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const inventory = await blobRawGet('hold_inventory');
+    const item = inventory.find(i => i.id === id);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+
+    // Cascade: clear inventory_id on any marketplace lots that referenced it
+    const lots = await blobRawGet('hold_marketplace_lots');
+    let lotsChanged = false;
+    for (const l of lots) {
+      if (l.inventory_id === id) {
+        l.inventory_id = null;
+        lotsChanged = true;
+      }
+    }
+    if (lotsChanged) await blobRawSet('hold_marketplace_lots', lots);
+
+    await blobDelete('hold_inventory', id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PRICE GUIDE ──
 app.get('/api/inventory/:id/prices', async (req, res) => {
   try {
