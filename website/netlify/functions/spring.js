@@ -548,6 +548,8 @@ Amanda tracks books she wants to read and has read. Each book has title, author,
 - dateStart is when she started reading. dateEnd is when she finished. Both use ISO format.
 - If Amanda says "I read it last week" or "last Tuesday," infer the dateEnd. If she says "I started it on Monday and finished yesterday," set both dates.
 - She can ask things like "Spring, add The Great Gatsby by F. Scott Fitzgerald to my book list" or "Spring, I want to read Dune"
+- EDITING: Amanda can edit any book. When she says "change" or "update" a book, append a new ===BOOK=== block with the updated fields and it will replace the old entry (match by title+author). For example: "Spring, I finished The Great Gatsby yesterday" would update it from want-to-read to read with dateEnd.
+- STATS: When reporting book stats, ONLY count books with status: "read". Want-to-read books are tracked separately. Format: "📚 You've read X books this year. 📖 You have Y books on your want-to-read list."
 - When Amanda asks to export her books, generate a formatted list she can copy. Use this format for export:
   "📚 My Bookshelf:" then list each book with emoji status (✅ for read, 📖 for want-to-read). Example:
   "✅ The Great Gatsby — F. Scott Fitzgerald | 180 pages | Jun 15-22, 2026
