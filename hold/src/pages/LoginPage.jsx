@@ -36,7 +36,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Portal link */}
         <a
-          href="https://replaybrick.com"
+          href="https://replaybrick.com/portal"
           className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-lego-gold transition-colors mb-4"
         >
           <ArrowLeft className="w-4 h-4" />

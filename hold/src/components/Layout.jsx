@@ -113,7 +113,7 @@ export default function Layout({ children }) {
             <Menu className="w-5 h-5" />
           </button>
           <a
-            href="https://replaybrick.com"
+            href="https://replaybrick.com/portal"
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-lego-gold transition-colors px-2 py-1 rounded hover:bg-dark-surface"
             title="Back to Portal"
           >
