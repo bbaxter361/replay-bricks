@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Box, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { ArrowLeft, Box, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
@@ -34,6 +34,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {/* Portal link */}
+        <a
+          href="https://replaybrick.com"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-lego-gold transition-colors mb-4"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Portal
+        </a>
+
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-lego-red rounded-2xl mb-4">
