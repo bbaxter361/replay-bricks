@@ -457,6 +457,15 @@ export const useStore = create((set, get) => ({
     syncToBlobs(get());
   },
 
+  updateBook: (id, updates) => {
+    set((state) => {
+      const books = state.books.map((b) => b.id === id ? { ...b, ...updates } : b);
+      saveData({ ...state, books });
+      return { books };
+    });
+    syncToBlobs(get());
+  },
+
   getBooksTally: () => {
     const { books } = get();
     const now = new Date();
@@ -467,9 +476,17 @@ export const useStore = create((set, get) => ({
     let thisWeek = 0;
     let thisMonth = 0;
     let thisYear = 0;
+    let readCount = 0;
+    let wantToReadCount = 0;
 
     books.forEach(book => {
-      const readDate = new Date(book.dateRead);
+      if (book.status === 'want-to-read') {
+        wantToReadCount++;
+        return; // don't count want-to-read in page stats
+      }
+      readCount++;
+      const readDate = book.dateEnd ? new Date(book.dateEnd) : (book.dateRead ? new Date(book.dateRead) : null);
+      if (!readDate || isNaN(readDate.getTime())) return;
       const pages = book.pages || 0;
       if (readDate >= startOfYear) thisYear += pages;
       if (readDate >= startOfMonth) thisMonth += pages;
@@ -480,7 +497,8 @@ export const useStore = create((set, get) => ({
       thisWeek,
       thisMonth,
       thisYear,
-      totalBooks: books.length
+      totalBooks: readCount,
+      wantToRead: wantToReadCount
     };
   },
 
