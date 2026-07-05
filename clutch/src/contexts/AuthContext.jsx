@@ -6,7 +6,7 @@ const AuthContext = createContext()
 const SESSION_KEY = 'hold_session'
 const API_BASE = import.meta.env.DEV
   ? 'http://localhost:3002/api'
-  : 'https://replaybrick.com/api/hold';
+  : 'https://replaybrick.com/api/clutch';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
