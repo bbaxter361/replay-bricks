@@ -75,6 +75,16 @@
   to = "/.netlify/functions/clutch"
   status = 200
 
+# Clutch SPA at /hold (legacy path — serves clutch app from hold subdirectory)
+[[redirects]]
+  from = "/hold/*"
+  to = "/hold/index.html"
+  status = 200
+[[redirects]]
+  from = "/hold"
+  to = "/hold/index.html"
+  status = 200
+
 # Clutch API (legacy hold path — must come BEFORE Spring catch-all)
 [[redirects]]
   from = "/api/hold/*"
