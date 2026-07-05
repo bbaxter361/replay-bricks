@@ -39,6 +39,10 @@ app.use((req, res, next) => {
     req.url = req.url.replace('/api/clutch/', '/api/');
   } else if (req.url.startsWith('/api/clutch')) {
     req.url = req.url.replace('/api/clutch', '/api');
+  } else if (req.url.startsWith('/api/hold/')) {
+    req.url = req.url.replace('/api/hold/', '/api/');
+  } else if (req.url.startsWith('/api/hold')) {
+    req.url = req.url.replace('/api/hold', '/api');
   }
   next();
 });

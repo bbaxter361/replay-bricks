@@ -75,6 +75,12 @@
   to = "/.netlify/functions/clutch"
   status = 200
 
+# Clutch API (legacy hold path — must come BEFORE Spring catch-all)
+[[redirects]]
+  from = "/api/hold/*"
+  to = "/.netlify/functions/clutch/:splat"
+  status = 200
+
 # Spring API (Compass/chat — catches all other /api/*)
 [[redirects]]
   from = "/api/*"
