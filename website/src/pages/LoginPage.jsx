@@ -23,7 +23,6 @@ export default function LoginPage({ onLogin }) {
 
     if (user) {
       onLogin(user);
-      navigate('/inventory');
     } else {
       setError('Invalid email or password. Please try again.');
     }

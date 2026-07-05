@@ -1,6 +1,6 @@
 # Main Replay Bricks website and Spring API
 [build]
-  command = "cd website && npm ci && npm run build && cd ../hold && npm install && npm run build && cp -r dist ../website/dist/hold"
+  command = "cd website && npm ci && npm run build"
   publish = "website/dist"
 
 [build.processing]
@@ -12,22 +12,25 @@
 [functions]
   directory = "website/netlify/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["pdf-parse", "mammoth", "xlsx", "@netlify/blobs"]
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx", "@netlify/blobs", "serverless-http", "express", "cors", "@netlify/functions", "oauth-1.0a", "multer"]
 
 [functions.spring]
   timeout = 90
   memory = 2048
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx", "@netlify/blobs", "serverless-http", "express", "cors", "@netlify/functions", "oauth-1.0a", "multer"]
+  node_bundler = "esbuild"
+  included_files = ["website/node_modules/pdfjs-dist/build/pdf.worker.mjs", "website/node_modules/pdfjs-dist/cmaps/**"]
 
-[functions.hold]
+[functions.clutch]
   timeout = 120
   memory = 1024
 
-[functions."hold-scheduled"]
+[functions."clutch-scheduled"]
   schedule = "*/15 * * * *"
 
 # ── Security Headers ──
 [[headers]]
-  for = "/hold/*"
+  for = "/clutch/*"
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
@@ -45,31 +48,31 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
 
 # ── API redirects ──
-# Hold inventory app — redirect /inventory to /hold/
+# Clutch inventory app — redirect /inventory to /clutch/
 [[redirects]]
   from = "/inventory"
-  to = "/hold/"
+  to = "/clutch/"
   status = 301
 
-# Hold inventory API (more specific — must come BEFORE Spring catch-all)
+# Clutch inventory API (more specific — must come BEFORE Spring catch-all)
 [[redirects]]
-  from = "/api/hold/*"
-  to = "/.netlify/functions/api"
+  from = "/api/clutch/*"
+  to = "/.netlify/functions/clutch/:splat"
   status = 200
 
 [[redirects]]
   from = "/api/inventory/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/clutch/:splat"
   status = 200
 
 [[redirects]]
   from = "/api/orders/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/clutch/:splat"
   status = 200
 
 [[redirects]]
   from = "/api/sync"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/clutch"
   status = 200
 
 # Spring API (Compass/chat — catches all other /api/*)
@@ -78,18 +81,18 @@
   to = "/.netlify/functions/spring"
   status = 200
 
-# Hold SPA — serve the inventory app at /hold
+# Clutch SPA — serve the inventory app at /clutch
 [[redirects]]
-  from = "/hold/*"
-  to = "/hold/index.html"
+  from = "/clutch/*"
+  to = "/clutch/index.html"
   status = 200
 [[redirects]]
-  from = "/hold"
-  to = "/hold/index.html"
+  from = "/clutch"
+  to = "/clutch/index.html"
   status = 200
 [[redirects]]
-  from = "/hold/"
-  to = "/hold/index.html"
+  from = "/clutch/"
+  to = "/clutch/index.html"
   status = 200
 
 # Main site SPA catch-all (keep LAST)

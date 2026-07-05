@@ -7,10 +7,16 @@
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["pdf-parse", "mammoth", "xlsx"]
 
 [[redirects]]
   from = "/api/hold/*"
-  to = "/.netlify/functions/api"
+  to = "/.netlify/functions/hold"
+  status = 200
+
+[[redirects]]
+  from = "/api/clutch/*"
+  to = "/.netlify/functions/clutch"
   status = 200
 
 [[redirects]]

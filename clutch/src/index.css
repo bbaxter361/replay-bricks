@@ -1,0 +1,590 @@
+/* ═══════════════════════════════════════════════════════════
+   CLUTCH — Windows 95 Retro Design System
+   Lego Inventory App
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+body {
+  font-family: 'MS Sans Serif', 'Microsoft Sans Serif', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  background: #008080; /* Classic teal desktop */
+  color: #000000;
+  line-height: 1.4;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ── Win95 Window Chrome ── */
+.win95-window {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+}
+
+.win95-panel {
+  background: #C0C0C0;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  box-shadow: inset -1px -1px 0 #DFDFDF, inset 1px 1px 0 #404040;
+}
+
+/* ── Title Bar ── */
+.win95-titlebar {
+  background: #000080;
+  color: #FFFFFF;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  user-select: none;
+}
+
+.win95-titlebar-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win95-titlebar-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.win95-titlebar-btn {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  width: 16px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  color: #000;
+}
+
+.win95-titlebar-btn:active {
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+}
+
+/* ── 3D Buttons ── */
+.win95-button {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  outline: 1px solid #000000;
+  font-family: 'MS Sans Serif', 'Microsoft Sans Serif', Tahoma, sans-serif;
+  font-size: 14px;
+  padding: 5px 20px;
+  cursor: pointer;
+  color: #000;
+  min-width: 80px;
+  text-align: center;
+  position: relative;
+}
+
+.win95-button:hover {
+  /* Button stays raised on hover — only changes on press */
+}
+
+.win95-button:active,
+.win95-button.pressed {
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  box-shadow: inset 1px 1px 0 #404040;
+  padding: 5px 15px 3px 17px;
+}
+
+.win95-button:focus-visible {
+  outline: 1px dotted #000000;
+  outline-offset: -4px;
+}
+
+.win95-button:disabled {
+  color: #808080;
+  text-shadow: 1px 1px 0 #FFFFFF;
+  pointer-events: none;
+}
+
+/* Red/Primary button variant */
+.win95-button-primary {
+  background: #C0C0C0;
+  font-weight: bold;
+}
+
+/* Small button */
+.win95-button-sm {
+  padding: 3px 10px;
+  min-width: auto;
+  font-size: 13px;
+}
+
+/* Icon button */
+.win95-button-icon {
+  padding: 3px 8px;
+  min-width: auto;
+  font-size: 16px;
+}
+
+/* ── Input Fields (sunken) ── */
+.win95-input {
+  background: #FFFFFF;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  font-family: 'MS Sans Serif', 'Microsoft Sans Serif', Tahoma, sans-serif;
+  font-size: 14px;
+  padding: 4px 8px;
+  color: #000;
+  outline: none;
+  width: 100%;
+}
+
+.win95-input:focus {
+  outline: none;
+}
+
+.win95-select {
+  background: #FFFFFF;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  font-family: 'MS Sans Serif', 'Microsoft Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  padding: 3px 4px;
+  color: #000;
+  cursor: pointer;
+}
+
+.win95-select:focus {
+  outline: 1px dotted #000;
+  outline-offset: -1px;
+}
+
+/* ── Table ── */
+.win95-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #FFFFFF;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+}
+
+.win95-table th {
+  background: #C0C0C0;
+  border: 1px solid #808080;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: bold;
+  text-align: left;
+  color: #000;
+}
+
+.win95-table td {
+  border: 1px solid #C0C0C0;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.win95-table tr:hover {
+  background: #000080;
+  color: #FFFFFF;
+}
+
+.win95-table tr.selected {
+  background: #000080;
+  color: #FFFFFF;
+}
+
+/* ── Status Bar ── */
+.win95-statusbar {
+  background: #C0C0C0;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  padding: 2px 6px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  min-height: 22px;
+}
+
+/* ── Menu Bar ── */
+.win95-menubar {
+  background: #C0C0C0;
+  border-bottom: 1px solid #808080;
+  padding: 2px 0;
+  display: flex;
+  gap: 0;
+  font-size: 11px;
+}
+
+.win95-menubar-item {
+  padding: 3px 8px;
+  cursor: pointer;
+  color: #000;
+  text-decoration: none;
+}
+
+.win95-menubar-item:hover {
+  background: #000080;
+  color: #FFFFFF;
+}
+
+/* ── Tabs ── */
+.win95-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #808080;
+  margin-bottom: 0;
+}
+
+.win95-tab {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  padding: 4px 16px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #000;
+  position: relative;
+  z-index: 1;
+}
+
+.win95-tab.active {
+  font-weight: bold;
+  border-bottom: 2px solid #C0C0C0;
+  margin-bottom: -2px;
+  z-index: 2;
+}
+
+/* ── Group Box ── */
+.win95-groupbox {
+  border: 2px solid #808080;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  padding: 12px 8px 8px;
+  margin: 8px 0;
+  position: relative;
+}
+
+.win95-groupbox legend {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 0 4px;
+  color: #000;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #C0C0C0;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  min-height: 20px;
+}
+
+::-webkit-scrollbar-button {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+::-webkit-scrollbar-corner {
+  background: #C0C0C0;
+}
+
+/* ── Links ── */
+.win95-link {
+  color: #0000FF;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.win95-link:visited {
+  color: #800080;
+}
+
+.win95-link:hover {
+  color: #0000FF;
+}
+
+/* ── Checkboxes & Radio ── */
+.win95-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.win95-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  background: #FFFFFF;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  cursor: pointer;
+  position: relative;
+}
+
+.win95-checkbox input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -2px;
+  left: 1px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #000;
+}
+
+/* ── Modal / Dialog ── */
+.win95-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.win95-dialog {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  box-shadow: inset -1px -1px 0 #404040, inset 1px 1px 0 #DFDFDF;
+  min-width: 300px;
+  max-width: 90vw;
+}
+
+/* ── Badge (for status indicators) ── */
+.win95-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  background: #C0C0C0;
+  border-top: 1px solid #808080;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #FFFFFF;
+  border-bottom: 1px solid #FFFFFF;
+}
+
+/* ── Loading spinner (hourglass) ── */
+.win95-loading {
+  display: inline-block;
+  animation: win95-spin 1s steps(8) infinite;
+  font-size: 16px;
+}
+
+@keyframes win95-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Utility: layout ── */
+.win95-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #008080;
+}
+
+.win95-content {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.win95-sidebar {
+  background: #C0C0C0;
+  border-right: 2px solid #808080;
+  min-width: 180px;
+  max-width: 200px;
+}
+
+/* ── Toast notifications (Win95 style) ── */
+.win95-toast {
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  padding: 6px 12px;
+  color: #000;
+}
+
+/* ── Gradient title bar for active window ── */
+.win95-titlebar-gradient {
+  background: linear-gradient(90deg, #000080, #1084D0);
+}
+
+/* ── Desktop icons (for login page) ── */
+.win95-desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 8px;
+  width: 90px;
+  text-align: center;
+  color: #FFFFFF;
+  font-size: 14px;
+}
+
+.win95-desktop-icon:hover {
+  background: rgba(0, 0, 128, 0.3);
+}
+
+.win95-desktop-icon span {
+  word-wrap: break-word;
+}
+
+/* ── Section divider ── */
+.win95-divider {
+  border: none;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #FFFFFF;
+  margin: 8px 0;
+  height: 0;
+}
+
+/* ── Section title with description ── */
+.win95-section-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000;
+  margin-bottom: 2px;
+}
+
+.win95-section-desc {
+  font-size: 12px;
+  color: #404040;
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+/* ── Quick action icon button ── */
+.win95-quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  min-width: 100px;
+  background: #C0C0C0;
+  border-top: 2px solid #FFFFFF;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: center;
+  text-decoration: none;
+  color: #000;
+  outline: 1px solid #000;
+}
+
+.win95-quick-action:active {
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+}
+
+.win95-quick-action-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+/* ── Stat card (sunken panel) ── */
+.win95-stat-card {
+  background: #FFFFFF;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  padding: 12px 16px;
+  min-width: 140px;
+}
+
+.win95-stat-card .stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #000080;
+}
+
+.win95-stat-card .stat-label {
+  font-size: 12px;
+  color: #404040;
+}

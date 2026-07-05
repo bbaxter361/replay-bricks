@@ -30,7 +30,8 @@ export default function PortalPage({ user, onLogout }) {
               <rect x="28" y="6" width="24" height="8" rx="3" fill="#E3000B"/>
             </svg>
           ),
-          route: 'https://replaybrick.com/hold/',
+          route: 'https://replaybrick.com/clutch/',
+          external: true,
           color: '#E3000B',
         },
       ],

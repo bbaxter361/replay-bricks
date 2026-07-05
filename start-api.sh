@@ -20,16 +20,16 @@ pkill -f cloudflared 2>/dev/null || true
 sleep 1
 
 # API key must come from the local environment.
-DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-}"
-if [ -z "$DEEPSEEK_API_KEY" ]; then
-  echo "❌ DEEPSEEK_API_KEY is not set. Export it before running this script."
+OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
+if [ -z "$OPENROUTER_API_KEY" ]; then
+  echo "❌ OPENROUTER_API_KEY is not set. Export it before running this script."
+  echo "   (Set the same key used by Hermes for OpenRouter)"
   exit 1
 fi
 
-# Start API server
 echo "🚀 Starting API server..."
 cd "$API_DIR"
-DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" PORT=3001 node server.js &
+OPENROUTER_API_KEY="$OPENROUTER_API_KEY" PORT=3001 node server.js &
 API_PID=$!
 echo "   PID: $API_PID"
 
@@ -95,7 +95,7 @@ while true; do
   # Check if processes are still running
   if ! kill -0 $API_PID 2>/dev/null; then
     echo "⚠️  API server died! Restarting..."
-    DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" PORT=3001 node server.js &
+    OPENROUTER_API_KEY="$OPENROUTER_API_KEY" PORT=3001 node server.js &
     API_PID=$!
   fi
   if ! kill -0 $TUNNEL_PID 2>/dev/null; then

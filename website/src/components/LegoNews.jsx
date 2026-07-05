@@ -118,9 +118,9 @@ export default function LegoNews() {
   }, []);
 
   return (
-    <Section id="news" className="section-secondary">
+    <Section id="investing" className="section-secondary">
       <SectionHeading
-        label={lastUpdated ? `Updated ${lastUpdated}` : 'Market Intelligence'}
+        label="Market Intelligence"
         title="LEGO Investment Insider"
         subtitle="Daily market intelligence for LEGO investors. Replay Bricks is your insider source for LEGO investment news, market analysis, and the stories that matter to serious collectors and investors."
       />

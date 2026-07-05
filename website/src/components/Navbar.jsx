@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { id: 'news', label: 'News' },
+  { id: 'investing', label: 'Investing' },
   { id: 'products', label: 'Products' },
   { id: 'marketplaces', label: 'Shop' },
   { id: 'about', label: 'About' },
@@ -15,6 +16,7 @@ export default function Navbar({ currentSection, showLogin }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -75,15 +77,16 @@ export default function Navbar({ currentSection, showLogin }) {
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                {item.label}
-                {currentSection === item.id && (
-                  <motion.div
-                    layoutId="nav-indicator"
-                    className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#E3000B] rounded-full"
-                  />
-                )}
-              </button>
-            ))}
+                  {item.label}
+                  {currentSection === item.id && (
+                    <motion.div
+                      layoutId="nav-indicator"
+                      className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#E3000B] rounded-full"
+                    />
+                  )}
+                </button>
+              )
+            )}
             {showLogin && (
               <button
                 onClick={() => navigate('/login')}

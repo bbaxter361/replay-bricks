@@ -37,8 +37,9 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ── Environment Variables ──
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const SPRING_MODEL = 'deepseek/deepseek-v4-flash';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
 const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET || '';
 
@@ -116,7 +117,7 @@ app.post('/api/chat', async (req, res) => {
   try {
     const { message, image, docText, fileName, history } = req.body;
 
-    if (!DEEPSEEK_API_KEY) {
+    if (!OPENROUTER_API_KEY) {
       return res.json({
         response: "Hi Amanda! I'm Spring, your activities planning assistant. I'd love to help you plan something wonderful today! Our connection to my brain is being set up — check back soon! 🌸"
       });
@@ -145,14 +146,16 @@ app.post('/api/chat', async (req, res) => {
 
     messages.push({ role: 'user', content: userContent.length > 0 ? userContent : message });
 
-    const response = await fetch(DEEPSEEK_API_URL, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://replaybrick.com',
+        'X-Title': 'Spring (Compass API)'
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: SPRING_MODEL,
         messages,
         max_tokens: 2000,
         temperature: 0.7
@@ -161,7 +164,7 @@ app.post('/api/chat', async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('DeepSeek API error:', response.status, errorText);
+      console.error('OpenRouter API error:', response.status, errorText);
       return res.status(response.status).json({
         error: 'AI service error',
         details: errorText
@@ -366,6 +369,6 @@ app.get('/api/health', (req, res) => {
 // ── Start server ──
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌱 Compass API server running on port ${PORT}`);
-  console.log(`🤖 DeepSeek: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Missing API key'}`);
+  console.log(`🤖 ${SPRING_MODEL}: ${OPENROUTER_API_KEY ? '✅ Configured' : '❌ Missing API key'}`);
   console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
 });

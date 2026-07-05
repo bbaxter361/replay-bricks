@@ -1,9 +1,10 @@
-// Spring v3.1 — Netlify Function
+// Spring v3.2 — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
-// Uses DeepSeek V4 Pro for production
+// Uses DeepSeek V4 Flash for production (downgraded from Pro — 3x cheaper, same quality for Amanda's needs)
 // v3.0: Upgraded to deepseek-v4-pro, added conversation memory, web search
 // v3.1: Added Brain Memory — durable extracted memories shared with Vicki & Amy
+// v3.2: Switched to deepseek-v4-flash — ~$2.41/mo vs ~$7.35/mo for Pro
 
 import serverless from 'serverless-http';
 import express from 'express';
@@ -102,15 +103,15 @@ function apiKeyAuth(req, res, next) {
 }
 
 // ── AI Configuration ──
-// Spring uses DeepSeek directly — cheap and fast for Amanda's needs
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_MODEL = 'deepseek-v4-pro';
+// Spring routes through OpenRouter — unified billing with Hermes
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || '';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const SPRING_MODEL = 'deepseek/deepseek-v4-flash';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4.1-mini';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
 const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET || '';
-const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI || 'https://api.replaybrick.com/api/canva/callback';
+const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI || 'https://replaybrick.com/api/canva/callback';
 const SPRING_API_KEY = process.env.SPRING_API_KEY || '';
 
 export function buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, history }) {
@@ -134,14 +135,16 @@ export function buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, 
 async function callAI(systemPrompt, userMessage, imageBase64, history) {
   const messages = buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, history });
 
-  const response = await fetch(DEEPSEEK_API_URL, {
+  const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://replaybrick.com',
+      'X-Title': 'Spring (Compass)'
     },
     body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
+      model: SPRING_MODEL,
       messages,
       max_tokens: 2000,
       temperature: 0.7
@@ -150,8 +153,8 @@ async function callAI(systemPrompt, userMessage, imageBase64, history) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('DeepSeek API error:', response.status, errorText);
-    throw new Error(`DeepSeek error: ${response.status}`);
+    console.error('OpenRouter API error:', response.status, errorText);
+    throw new Error(`OpenRouter error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -315,14 +318,16 @@ ${String(text || '').slice(0, 70000)}
 }
 
 async function callDeepSeekForCalendarImport({ fileName, text, targetMonth, importMode }) {
-  const response = await fetch(DEEPSEEK_API_URL, {
+  const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://replaybrick.com',
+      'X-Title': 'Spring (Calendar Import)'
     },
     body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
+      model: SPRING_MODEL,
       messages: [
         { role: 'system', content: 'You extract activity calendars into strict JSON for a senior living activities director.' },
         { role: 'user', content: buildCalendarImportPrompt({ fileName, text, targetMonth, importMode }) }
@@ -335,8 +340,8 @@ async function callDeepSeekForCalendarImport({ fileName, text, targetMonth, impo
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('DeepSeek calendar import error:', response.status, errorText);
-    throw new Error(`DeepSeek calendar import error: ${response.status}`);
+    console.error('OpenRouter calendar import error:', response.status, errorText);
+    throw new Error(`OpenRouter calendar import error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -927,7 +932,7 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
     const { message, image, docText, fileName, history } = req.body;
 
     // Check if we have any AI configured
-    const noAI = !DEEPSEEK_API_KEY;
+    const noAI = !OPENROUTER_API_KEY;
 
     if (noAI) {
       return res.json({
@@ -1045,8 +1050,8 @@ app.post('/api/import-calendar', apiKeyAuth, upload.single('file'), async (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    if (!DEEPSEEK_API_KEY) {
-      return res.status(503).json({ error: 'Calendar import needs DeepSeek configured.' });
+    if (!OPENROUTER_API_KEY) {
+      return res.status(503).json({ error: 'Calendar import needs OpenRouter configured.' });
     }
 
     const filePath = req.file.path;
@@ -1296,15 +1301,147 @@ app.get('/api/data', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 60,
   }
 });
 
-// ── Canva Autofill ──
+// ── Canva OAuth 2.0 Integration ──
+// Uses Netlify Blobs to store refresh_token for persistent, indefinite access.
+// Amanda authorizes once via GET /api/canva/auth, then tokens auto-refresh forever.
+const CANVA_TOKENS_KEY = 'spring_canva_tokens';
+
+// ── Blob-backed token storage ──
+
+async function getStoredCanvaTokens() {
+  const store = await getBlobStore();
+  if (store instanceof Map) {
+    const raw = store.get(CANVA_TOKENS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } else {
+    return await store.get(CANVA_TOKENS_KEY, { type: 'json' }) || null;
+  }
+}
+
+async function saveCanvaTokens(tokens) {
+  const store = await getBlobStore();
+  const payload = JSON.stringify(tokens);
+  if (store instanceof Map) {
+    store.set(CANVA_TOKENS_KEY, payload);
+  } else {
+    await store.set(CANVA_TOKENS_KEY, payload);
+  }
+}
+
+// ── Token lifecycle ──
+
 let canvaAccessToken = null;
 let canvaTokenExpiry = 0;
 
 async function getCanvaToken() {
+  // Return cached token if still valid (5 min buffer)
   if (canvaAccessToken && Date.now() < canvaTokenExpiry - 300000) {
     return canvaAccessToken;
   }
+
+  // Load stored tokens from Netlify Blobs
+  const stored = await getStoredCanvaTokens();
+  if (!stored || !stored.refresh_token) {
+    throw new Error(
+      'Canva is not connected yet. ' +
+      'Go to https://compass-replaybricks-v2-550.netlify.app/settings and click "Connect Canva", ' +
+      'or visit GET /api/canva/auth to authorize.'
+    );
+  }
+
+  // Use refresh_token to get a new access_token
   try {
+    const tokenResponse = await fetch('https://api.canva.com/rest/v1/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: CANVA_CLIENT_ID,
+        client_secret: CANVA_CLIENT_SECRET,
+        refresh_token: stored.refresh_token
+      })
+    });
+
+    if (tokenResponse.ok) {
+      const data = await tokenResponse.json();
+      canvaAccessToken = data.access_token;
+      canvaTokenExpiry = Date.now() + (data.expires_in * 1000);
+
+      // Persist updated tokens — Canva may issue a new refresh_token on refresh
+      await saveCanvaTokens({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || stored.refresh_token,
+        expires_in: data.expires_in,
+        updated_at: Date.now()
+      });
+
+      return canvaAccessToken;
+    }
+
+    // Token refresh failed — old refresh_token may have been revoked
+    // Clear stored tokens so the user gets a fresh error next time
+    await saveCanvaTokens({});
+    canvaAccessToken = null;
+    canvaTokenExpiry = 0;
+
+    throw new Error(
+      'Canva authorization expired or was revoked. ' +
+      'Go to https://compass-replaybricks-v2-550.netlify.app/settings and click "Connect Canva" to re-authorize.'
+    );
+  } catch (e) {
+    // Re-throw our own messages; wrap unexpected errors
+    if (e.message.includes('Canva')) throw e;
+    throw new Error(
+      'Canva is not connected yet. ' +
+      'Go to https://compass-replaybricks-v2-550.netlify.app/settings and click "Connect Canva", ' +
+      'or visit GET /api/canva/auth to authorize.'
+    );
+  }
+}
+
+// ── GET /api/canva/auth — redirect to Canva OAuth authorization page ──
+// Public endpoint (no apiKeyAuth) so the browser redirect works.
+app.get('/api/canva/auth', (req, res) => {
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: CANVA_CLIENT_ID,
+    redirect_uri: CANVA_REDIRECT_URI,
+    scope: 'design:content:write design:meta:read'
+  });
+  // Pass a state param for CSRF protection using the stored tokens location
+  const state = Buffer.from(JSON.stringify({ t: Date.now() })).toString('base64');
+  params.set('state', state);
+
+  res.redirect(`https://www.canva.com/api/oauth/authorize?${params.toString()}`);
+});
+
+// ── GET /api/canva/callback — receive OAuth code, exchange for tokens, store ──
+// Public endpoint — Canva redirects the user's browser here after authorization.
+app.get('/api/canva/callback', async (req, res) => {
+  const { code, error: authError } = req.query;
+
+  if (authError) {
+    return res.status(400).send(`
+      <html><body>
+        <h2>Canva Authorization Failed</h2>
+        <p>${authError}</p>
+        <p><a href="https://compass-replaybricks-v2-550.netlify.app/settings">Back to Settings</a></p>
+      </body></html>
+    `);
+  }
+
+  if (!code) {
+    return res.status(400).send(`
+      <html><body>
+        <h2>Missing Authorization Code</h2>
+        <p>No authorization code was received from Canva. Please try again.</p>
+        <p><a href="/api/canva/auth">Start Over</a></p>
+      </body></html>
+    `);
+  }
+
+  try {
+    // Exchange the one-time authorization code for tokens
     const tokenResponse = await fetch('https://api.canva.com/rest/v1/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1312,22 +1449,79 @@ async function getCanvaToken() {
         grant_type: 'authorization_code',
         client_id: CANVA_CLIENT_ID,
         client_secret: CANVA_CLIENT_SECRET,
-        code: process.env.CANVA_AUTH_CODE || '',
+        code: code,
         redirect_uri: CANVA_REDIRECT_URI
       })
     });
-    if (tokenResponse.ok) {
-      const data = await tokenResponse.json();
-      canvaAccessToken = data.access_token;
-      canvaTokenExpiry = Date.now() + (data.expires_in * 1000);
-      return canvaAccessToken;
-    }
-    throw new Error('Token exchange failed');
-  } catch (e) {
-    throw new Error('Canva not authorized');
-  }
-}
 
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Canva token exchange failed:', tokenResponse.status, errorText);
+      return res.status(502).send(`
+        <html><body>
+          <h2>Token Exchange Failed</h2>
+          <p>Could not exchange the authorization code for tokens. Error: ${errorText}</p>
+          <p><a href="/api/canva/auth">Try Again</a></p>
+        </body></html>
+      `);
+    }
+
+    const data = await tokenResponse.json();
+
+    // Store tokens persistently in Netlify Blobs
+    await saveCanvaTokens({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+      updated_at: Date.now()
+    });
+
+    // Warm the in-memory cache
+    canvaAccessToken = data.access_token;
+    canvaTokenExpiry = Date.now() + (data.expires_in * 1000);
+
+    console.log('✅ Canva OAuth successful — tokens stored in Netlify Blobs');
+
+    // Redirect to the Compass settings page with a success message
+    res.redirect(
+      'https://compass-replaybricks-v2-550.netlify.app/settings?canva=connected'
+    );
+  } catch (err) {
+    console.error('Canva callback error:', err);
+    res.status(500).send(`
+      <html><body>
+        <h2>Something went wrong</h2>
+        <p>${err.message}</p>
+        <p><a href="/api/canva/auth">Try Again</a></p>
+      </body></html>
+    `);
+  }
+});
+
+// ── GET /api/canva/status — check whether Canva is connected ──
+app.get('/api/canva/status', async (req, res) => {
+  try {
+    const stored = await getStoredCanvaTokens();
+    const connected = !!(stored && stored.refresh_token);
+    res.json({
+      connected,
+      canva_client_id: CANVA_CLIENT_ID ? 'configured' : 'missing',
+      canva_client_secret: CANVA_CLIENT_SECRET ? 'configured' : 'missing',
+      redirect_uri: CANVA_REDIRECT_URI,
+      token_age: stored?.updated_at
+        ? Math.round((Date.now() - stored.updated_at) / 1000 / 60) + ' minutes'
+        : null,
+      message: connected
+        ? 'Canva is connected and ready to use.'
+        : 'Canva is not connected yet. Visit GET /api/canva/auth or go to the Settings page to authorize.',
+      auth_url: connected ? null : '/api/canva/auth'
+    });
+  } catch (err) {
+    res.status(500).json({ connected: false, error: err.message });
+  }
+});
+
+// ── POST /api/canva/autofill — autofill a Canva design ──
 app.post('/api/canva/autofill', apiKeyAuth, async (req, res) => {
   try {
     const { designId, events } = req.body;
@@ -1452,13 +1646,75 @@ app.get('/api/brain/memories', apiKeyAuth, async (req, res) => {
   }
 });
 
+// ── BrickLink Image Proxy ──
+// Proxies BrickLink CDN images to bypass CORS/Referer blocking.
+// GET /api/images?url=https://img.bricklink.com/ItemImage/SN/0/77047.png
+app.get('/api/images', async (req, res) => {
+  const imageUrl = req.query.url;
+  if (!imageUrl) {
+    return res.status(400).json({ error: 'Missing ?url= parameter' });
+  }
+
+  // Only proxy BrickLink image URLs
+  try {
+    const parsed = new URL(imageUrl);
+    if (!parsed.hostname.endsWith('img.bricklink.com') && !parsed.hostname.endsWith('bricklink.com')) {
+      return res.status(403).json({ error: 'Only BrickLink image URLs are allowed' });
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+
+  try {
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      console.warn('BrickLink image fetch failed:', response.status, imageUrl);
+      // Return a transparent SVG placeholder
+      res.set('Content-Type', 'image/svg+xml');
+      res.set('Cache-Control', 'public, max-age=300');
+      res.set('Access-Control-Allow-Origin', '*');
+      return res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23333" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23666" font-size="10">No Image</text></svg>');
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    res.set('Content-Type', contentType);
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cache-Control', 'public, max-age=86400'); // 24 hours
+    res.set('X-Proxy', 'spring-bricklink');
+
+    // Pass through Content-Length for proper streaming
+    if (buffer.length) {
+      res.set('Content-Length', String(buffer.length));
+    }
+
+    res.end(buffer);
+  } catch (err) {
+    console.error('Image proxy error:', err.message, imageUrl);
+    // Return a transparent SVG placeholder on any error
+    res.set('Content-Type', 'image/svg+xml');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23333" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="%23666" font-size="10">No Image</text></svg>');
+  }
+});
+
 // ── Health check ──
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Spring (Netlify)',
     version: '3.1.0',
-    model: DEEPSEEK_MODEL,
+    model: SPRING_MODEL,
     blobs: true,
     blobStoreMode,
     blobStoreError: blobStoreError || null,
@@ -1475,7 +1731,7 @@ export { handler };
 if (process.env.NETLIFY_DEV !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌱 Spring running on port ${PORT}`);
-    console.log(`🤖 ${DEEPSEEK_MODEL}: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 ${SPRING_MODEL}: ${OPENROUTER_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
   });
 }

@@ -3,7 +3,7 @@
     {
       "title": "Top 10 Sets Retiring This Quarter — What Investors Need to Know",
       "source": "Investabrick",
-      "date": "2026-06-11",
+      "date": "2026-07-04",
       "snippet": "From the Botanical Collection to Architecture landmarks, these retiring sets present the best buying opportunities.",
       "url": "https://investabrick.com/",
       "badgeColor": "from-purple-500 to-violet-500",
@@ -12,34 +12,23 @@
       "badgeBorder": "border-blue-500/30"
     },
     {
-      "title": "Has Star Wars Smart Play flopped?",
+      "title": "LEGO Ideas 21370 E.T. the Extra-Terrestrial revealed!",
       "source": "Brickset",
-      "date": "2026-06-11",
+      "date": "2026-07-04",
       "snippet": "Latest from Brickset — click to read the full article.",
-      "url": "/article/132355/has-star-wars-smart-play-flopped",
+      "url": "/article/132946/lego-ideas-21370-e-t-the-extra-terrestrial-revealed!",
       "badgeColor": "from-green-500 to-emerald-500",
       "badgeBg": "bg-blue-500/10",
       "badgeText": "text-blue-400",
       "badgeBorder": "border-blue-500/30"
     },
     {
-      "title": "LEGO Architecture 21056 Taj Mahal Retirement Confirmed",
-      "source": "Brickset",
-      "date": "2026-06-11",
-      "snippet": "The iconic architectural landmark set is entering its final production run. Current MSRP $119.99.",
-      "url": "https://brickset.com/",
-      "badgeColor": "from-green-500 to-emerald-500",
-      "badgeBg": "bg-blue-500/10",
-      "badgeText": "text-blue-400",
-      "badgeBorder": "border-blue-500/30"
-    },
-    {
-      "title": "Random set of the day: Jet Ray",
-      "source": "Brickset",
-      "date": "2026-06-11",
-      "snippet": "Latest from Brickset — click to read the full article.",
-      "url": "/article/132418/random-set-of-the-day-jet-ray",
-      "badgeColor": "from-green-500 to-emerald-500",
+      "title": "Market Analysis: Botanical Collection Continues to Dominate Returns",
+      "source": "BrickEconomy",
+      "date": "2026-07-04",
+      "snippet": "Sets like 10311 Orchid and 10309 Succulents have averaged 45% appreciation within 12 months of retirement.",
+      "url": "https://www.brickeconomy.com/",
+      "badgeColor": "from-blue-500 to-cyan-500",
       "badgeBg": "bg-blue-500/10",
       "badgeText": "text-blue-400",
       "badgeBorder": "border-blue-500/30"
@@ -47,7 +36,7 @@
     {
       "title": "LEGO Star Wars 75313 AT-AT Shows Strong Post-Retirement Growth",
       "source": "BrickEconomy",
-      "date": "2026-06-11",
+      "date": "2026-07-04",
       "snippet": "The UCS AT-AT has seen a 34% increase since retirement in December 2025, outperforming most other large sets.",
       "url": "https://www.brickeconomy.com/",
       "badgeColor": "from-blue-500 to-cyan-500",
@@ -56,17 +45,28 @@
       "badgeBorder": "border-blue-500/30"
     },
     {
-      "title": "Market Analysis: Botanical Collection Continues to Dominate Returns",
-      "source": "BrickEconomy",
-      "date": "2026-06-11",
-      "snippet": "Sets like 10311 Orchid and 10309 Succulents have averaged 45% appreciation within 12 months of retirement.",
-      "url": "https://www.brickeconomy.com/",
-      "badgeColor": "from-blue-500 to-cyan-500",
+      "title": "Vintage set of the week: Police Helicopter",
+      "source": "Brickset",
+      "date": "2026-07-04",
+      "snippet": "Latest from Brickset — click to read the full article.",
+      "url": "/article/132970/vintage-set-of-the-week-police-helicopter",
+      "badgeColor": "from-green-500 to-emerald-500",
+      "badgeBg": "bg-blue-500/10",
+      "badgeText": "text-blue-400",
+      "badgeBorder": "border-blue-500/30"
+    },
+    {
+      "title": "LEGO Architecture 21056 Taj Mahal Retirement Confirmed",
+      "source": "Brickset",
+      "date": "2026-07-04",
+      "snippet": "The iconic architectural landmark set is entering its final production run. Current MSRP $119.99.",
+      "url": "https://brickset.com/",
+      "badgeColor": "from-green-500 to-emerald-500",
       "badgeBg": "bg-blue-500/10",
       "badgeText": "text-blue-400",
       "badgeBorder": "border-blue-500/30"
     }
   ],
-  "updated": "2026-06-11",
-  "generated": "2026-06-11T14:00:19.143Z"
+  "updated": "2026-07-04",
+  "generated": "2026-07-04T14:00:53.013Z"
 }
