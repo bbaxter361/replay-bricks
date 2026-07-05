@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 
-const COMPASS_URL = 'https://compass-replaybricks-v2-550.netlify.app/chat?auto=true';
+const COMPASS_URL = 'https://compass-replaybricks.netlify.app/chat?auto=true';
 
 export default function CompassPage({ user, onLogout }) {
   const navigate = useNavigate();
