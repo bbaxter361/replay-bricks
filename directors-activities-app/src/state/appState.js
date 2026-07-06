@@ -15,6 +15,7 @@ import {
 import { loadLocalState, saveLocalState } from '../services/dataClient.js';
 import { approveActivityDraft as approveDraft } from '../utils/activityDrafts.js';
 import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints.js';
+import { addBook, deleteBook } from '../utils/bookShelf.js';
 import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning.js';
 import { addFamilyContact, deleteFamilyContact } from '../utils/familyContacts.js';
 import { addResidentActivityAttendance } from '../utils/residentAttendance.js';
@@ -136,6 +137,10 @@ export function appReducer(state, action) {
       };
     case 'deleteFamilyContact':
       return { ...state, contacts: deleteFamilyContact(state.contacts, action.contactId) };
+    case 'addBook':
+      return { ...state, books: addBook(state.books, action.book) };
+    case 'deleteBook':
+      return { ...state, books: deleteBook(state.books, action.bookId) };
     case 'addResidentActivityAttendance':
       return {
         ...state,

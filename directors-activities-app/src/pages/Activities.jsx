@@ -7,15 +7,32 @@ import { useAppState } from '../state/appState';
 export default function Activities() {
   const { state, dispatch } = useAppState();
   const [mode, setMode] = useState('approved');
+  const [isDraftDialogOpen, setIsDraftDialogOpen] = useState(false);
+  const [draftForm, setDraftForm] = useState({ title: '', sourceLabel: '' });
   const records = mode === 'approved' ? state.activities : state.activityDrafts;
   const selected = records.find((item) => item.id === (mode === 'approved' ? state.selectedActivityId : records[0]?.id)) || records[0];
+
+  const submitDraft = (event) => {
+    event.preventDefault();
+    const title = draftForm.title.trim();
+    if (!title) return;
+
+    dispatch({
+      type: 'createActivityDraft',
+      title,
+      source: { type: 'manual', label: draftForm.sourceLabel.trim() || 'Manual entry' },
+    });
+    setDraftForm({ title: '', sourceLabel: '' });
+    setMode('drafts');
+    setIsDraftDialogOpen(false);
+  };
 
   return (
     <>
       <SectionHeader
         eyebrow="Activities"
-        title="Reusable Activity Library"
-        actions={<button className="app-button app-button-primary" onClick={() => dispatch({ type: 'createActivityDraft', title: 'New scanned activity', source: { type: 'scan', label: 'Phone scan or upload' } })} type="button"><FilePlus2 size={16} /> New draft</button>}
+        title="Activities Library"
+        actions={<button className="app-button app-button-primary" onClick={() => setIsDraftDialogOpen(true)} type="button"><FilePlus2 size={16} /> New draft</button>}
       >
         Websites, scans, and uploaded files become drafts first. Amanda approves before they become official activities.
       </SectionHeader>
@@ -77,6 +94,48 @@ export default function Activities() {
           )}
         </section>
       </div>
+
+      {isDraftDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#25183f]/35 px-4">
+          <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onSubmit={submitDraft}>
+            <h2 className="text-xl font-black text-[#25183f]">Create Activity Draft</h2>
+            <p className="mt-2 text-sm leading-6 text-[#74638d]">
+              Amanda can start the draft here, then Spring can help fill in the full activity file.
+            </p>
+            <label className="mt-4 block text-sm font-bold text-[#5a4873]" htmlFor="draft-title">
+              Activity title
+            </label>
+            <input
+              autoFocus
+              className="app-input mt-2"
+              id="draft-title"
+              onChange={(event) => setDraftForm((current) => ({ ...current, title: event.target.value }))}
+              placeholder="Enter activity title"
+              type="text"
+              value={draftForm.title}
+            />
+            <label className="mt-4 block text-sm font-bold text-[#5a4873]" htmlFor="draft-source">
+              Source or website
+            </label>
+            <input
+              className="app-input mt-2"
+              id="draft-source"
+              onChange={(event) => setDraftForm((current) => ({ ...current, sourceLabel: event.target.value }))}
+              placeholder="Paste a website or note"
+              type="text"
+              value={draftForm.sourceLabel}
+            />
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button className="app-button app-button-secondary" onClick={() => setIsDraftDialogOpen(false)} type="button">
+                Cancel
+              </button>
+              <button className="app-button app-button-primary" type="submit">
+                Save Draft
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }

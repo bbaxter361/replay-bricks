@@ -166,5 +166,14 @@ export const contacts = [
 ];
 
 export const books = [
-  { id: 'book-1', title: 'The 36-Hour Day', author: 'Nancy L. Mace and Peter V. Rabins', pages: 384, status: 'reference' },
+  {
+    id: 'book-1',
+    title: 'The 36-Hour Day',
+    author: 'Nancy L. Mace and Peter V. Rabins',
+    pages: 384,
+    status: 'bookshelf',
+    dateStarted: '2026-07-06',
+    dateCompleted: '',
+    rating: 0,
+  },
 ];

@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, ContactRound, Gamepad2, Home, MessageCircle, Palette, Settings, Sparkles, UsersRound } from 'lucide-react';
+import { BookOpen, CalendarDays, ContactRound, Gamepad2, Home, MessageCircle, Palette, Sparkles, UsersRound } from 'lucide-react';
 
 export const navItems = [
   { to: '/app', label: 'Home', icon: Home, end: true },
@@ -10,5 +10,4 @@ export const navItems = [
   { to: '/app/family', label: 'Family of Residents', icon: ContactRound },
   { to: '/app/books', label: 'Books', icon: BookOpen },
   { to: '/app/games', label: 'Games', icon: Gamepad2 },
-  { to: '/app/settings', label: 'Settings', icon: Settings },
 ];
