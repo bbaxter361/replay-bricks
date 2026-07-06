@@ -11,7 +11,7 @@ export function addBingoTransaction(transactions, transaction) {
       amount: Number(transaction.amount || 0),
       reason: transaction.reason || 'Manual adjustment',
       createdBy: transaction.createdBy || 'System',
-      createdAt: new Date().toISOString(),
+      createdAt: transaction.createdAt || new Date().toISOString(),
     },
   ];
 }
