@@ -23,7 +23,7 @@ export default function LoginPage({ onLogin }) {
 
     if (user) {
       onLogin(user);
-      navigate('/inventory');
+      navigate('/portal');
     } else {
       setError('Invalid email or password. Please try again.');
     }
@@ -61,8 +61,8 @@ export default function LoginPage({ onLogin }) {
               REPLAY<span className="text-[#E3000B]">.</span>BRICKS
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-white">Inventory Portal</h1>
-          <p className="text-gray-500 mt-1">Sign in to manage your inventory</p>
+          <h1 className="text-2xl font-bold text-white">Compass Portal</h1>
+          <p className="text-gray-500 mt-1">Sign in to open your portal</p>
         </div>
 
         {/* Login Form */}
@@ -111,7 +111,7 @@ export default function LoginPage({ onLogin }) {
 
           <div className="mt-6 pt-6 border-t border-white/5">
             <p className="text-gray-500 text-xs text-center">
-              Private inventory portal — authorized users only
+              Private Compass Portal — authorized users only
             </p>
           </div>
         </div>

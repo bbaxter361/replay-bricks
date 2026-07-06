@@ -9,9 +9,17 @@ test('portal embeds the current Compass v2 frontend', async () => {
   assert.doesNotMatch(source, /https:\/\/compass-replaybricks\.netlify\.app/);
 });
 
-test('portal launches Compass as the standalone v2 app', async () => {
+test('portal embeds the Compass Portal app on replaybrick.com/portal', async () => {
   const source = await readFile(new URL('../src/pages/PortalPage.jsx', import.meta.url), 'utf8');
 
-  assert.match(source, /https:\/\/compass-replaybricks-v2-550\.netlify\.app\/chat\?auto=true/);
-  assert.match(source, /window\.location\.href = app\.route/);
+  assert.match(source, /https:\/\/baxter-directors-activities\.netlify\.app\//);
+  assert.match(source, /<iframe/);
+  assert.match(source, /Compass Portal/);
+});
+
+test('successful login sends users to the portal', async () => {
+  const source = await readFile(new URL('../src/pages/LoginPage.jsx', import.meta.url), 'utf8');
+
+  assert.match(source, /navigate\('\/portal'\)/);
+  assert.doesNotMatch(source, /navigate\('\/inventory'\)/);
 });

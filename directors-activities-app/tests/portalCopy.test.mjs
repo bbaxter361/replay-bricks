@@ -12,3 +12,11 @@ test('portal hero is Compass Portal while Director app remains a portal tile', a
   assert.match(portalSource, /<h1[^>]*>Compass Portal<\/h1>/);
   assert.equal(directorApp?.name, "Director's Activities App");
 });
+
+test('portal can select Brian or Amanda from replaybrick login query', async () => {
+  const portalSource = await readFile(new URL('../src/components/Portal.jsx', import.meta.url), 'utf8');
+
+  assert.match(portalSource, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(portalSource, /amanda: 'user-amanda'/);
+  assert.match(portalSource, /brian: 'user-brian'/);
+});

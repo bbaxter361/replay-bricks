@@ -12,9 +12,16 @@ const iconByApp = {
   'star-wars': Star,
 };
 
+const portalUserIdBySlug = {
+  brian: 'user-brian',
+  amanda: 'user-amanda',
+};
+
 export default function Portal() {
   const { state, dispatch } = useAppState();
-  const [selectedUserId, setSelectedUserId] = useState(state.currentUser?.id || 'user-brian');
+  const requestedUser = new URLSearchParams(window.location.search).get('user');
+  const initialUserId = portalUserIdBySlug[requestedUser] || state.currentUser?.id || 'user-brian';
+  const [selectedUserId, setSelectedUserId] = useState(initialUserId);
   const navigate = useNavigate();
   const selectedUser = state.users.find((user) => user.id === selectedUserId) || state.users[0];
   const visibleApps = useMemo(
