@@ -1,7 +1,7 @@
-import { CalendarPlus, FilePlus2, Send, UsersRound } from 'lucide-react';
-import { useState } from 'react';
+import { CalendarPlus, FilePlus2, Paperclip, Send, UsersRound, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
-import { sendSpringChat } from '../services/springApi.js';
+import { sendSpringChat, uploadSpringFile } from '../services/springApi.js';
 import { useAppState } from '../state/appState';
 import { parseSpringActions } from '../utils/springActions.js';
 
@@ -18,6 +18,10 @@ export default function SpringAssistant() {
   const { state, dispatch } = useAppState();
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileError, setFileError] = useState('');
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileInputRef = useRef(null);
 
   const applySpringActions = (actions) => {
     actions.events.forEach((event) => {
@@ -70,18 +74,50 @@ export default function SpringAssistant() {
     });
   };
 
+  const handleFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError('Please choose a file under 10 MB.');
+      event.target.value = '';
+      return;
+    }
+    setFileError('');
+    setSelectedFile(file);
+    event.target.value = '';
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    setFileError('');
+  };
+
   const send = async (text = message) => {
     const trimmed = text.trim();
-    if (!trimmed || isSending) return;
-    const userMessage = makeMessage('user', trimmed);
+    if ((!trimmed && !selectedFile) || isSending || isReadingFile) return;
+    const attachedFile = selectedFile;
+    const visibleMessage = attachedFile
+      ? `${trimmed || 'Please review this upload.'}\n\nAttached file: ${attachedFile.name}`
+      : trimmed;
+    const userMessage = makeMessage('user', visibleMessage);
     dispatch({ type: 'appendSpringMessage', message: userMessage });
     setMessage('');
     setIsSending(true);
 
     try {
+      let uploadedFile = null;
+      if (attachedFile) {
+        setIsReadingFile(true);
+        uploadedFile = await uploadSpringFile(attachedFile);
+        setIsReadingFile(false);
+        removeFile();
+      }
+
       const rawResponse = await sendSpringChat({
-        message: trimmed,
+        message: trimmed || 'Please review this upload and help me turn it into something useful for activities.',
         history: [...state.springMessages, userMessage],
+        docText: uploadedFile?.text,
+        fileName: uploadedFile?.fileName || attachedFile?.name,
       });
       const parsed = parseSpringActions(rawResponse);
       applySpringActions(parsed);
@@ -92,9 +128,10 @@ export default function SpringAssistant() {
     } catch {
       dispatch({
         type: 'appendSpringMessage',
-        message: makeMessage('assistant', "I'm having trouble connecting to Spring right now. The existing Spring backend may need a moment, then we can try again."),
+        message: makeMessage('assistant', "I'm having trouble reading that file or connecting to Spring right now. Please try the upload again or use a different file format."),
       });
     } finally {
+      setIsReadingFile(false);
       setIsSending(false);
     }
   };
@@ -116,6 +153,22 @@ export default function SpringAssistant() {
               </div>
             ))}
           </div>
+          {(selectedFile || fileError) && (
+            <div className="mt-4 rounded-lg border border-[#ded0f2] bg-[#fbf8ff] p-3 text-sm">
+              {selectedFile && (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-black text-[#25183f]">Ready to send</p>
+                    <p className="truncate text-[#74638d]">{selectedFile.name}</p>
+                  </div>
+                  <button aria-label="Remove attached file" className="app-button app-button-secondary px-3" onClick={removeFile} type="button">
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              {fileError && <p className="text-[#9f1d35]">{fileError}</p>}
+            </div>
+          )}
           <form
             className="mt-4 flex gap-2"
             onSubmit={(event) => {
@@ -123,9 +176,20 @@ export default function SpringAssistant() {
               send();
             }}
           >
+            <button aria-label="Attach file" className="app-button app-button-secondary px-3" disabled={isSending || isReadingFile} onClick={() => fileInputRef.current?.click()} title="Attach file" type="button">
+              <Paperclip size={17} />
+            </button>
+            <input
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.md"
+              className="hidden"
+              onChange={handleFileSelect}
+              ref={fileInputRef}
+              type="file"
+            />
             <input className="app-input" onChange={(event) => setMessage(event.target.value)} placeholder="Ask Spring to plan, draft, or summarize..." value={message} />
-            <button className="app-button app-button-primary" disabled={isSending} type="submit"><Send size={17} /></button>
+            <button className="app-button app-button-primary" disabled={isSending || isReadingFile || (!message.trim() && !selectedFile)} type="submit"><Send size={17} /></button>
           </form>
+          <p className="mt-2 text-xs text-[#74638d]">Attach images, PDFs, Word docs, Excel files, CSVs, or notes for Spring to read.</p>
         </section>
 
         <aside className="space-y-3">

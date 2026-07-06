@@ -11,6 +11,7 @@ const allowedPaths = new Set([
   '/api/data/chatHistory',
   '/api/data/conversations',
   '/api/data/books',
+  '/api/read-file',
 ]);
 
 export default async (req) => {
@@ -23,13 +24,16 @@ export default async (req) => {
     return Response.json({ error: 'Unsupported Spring proxy path.' }, { status: 404 });
   }
 
+  const contentType = req.headers.get('content-type');
+  const headers = {
+    'x-api-key': SPRING_API_KEY,
+  };
+  if (contentType) headers['content-type'] = contentType;
+
   const response = await fetch(`${SPRING_API_BASE}${targetPath}${url.search}`, {
     method: req.method,
-    headers: {
-      'Content-Type': req.headers.get('Content-Type') || 'application/json',
-      'x-api-key': SPRING_API_KEY,
-    },
-    body: req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text(),
+    headers,
+    body: req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer(),
   });
 
   const body = await response.text();
@@ -50,5 +54,6 @@ export const config = {
     '/api/spring-proxy/data/chatHistory',
     '/api/spring-proxy/data/conversations',
     '/api/spring-proxy/data/books',
+    '/api/spring-proxy/read-file',
   ],
 };

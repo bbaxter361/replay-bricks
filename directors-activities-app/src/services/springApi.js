@@ -22,12 +22,14 @@ export async function springApiFetch(path, options = {}) {
   });
 }
 
-export async function sendSpringChat({ message, history }) {
+export async function sendSpringChat({ message, history, docText, fileName }) {
   const response = await springApiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message,
+      docText,
+      fileName,
       history: (history || []).slice(-20).map((item) => ({
         role: item.role,
         content: item.content,
@@ -38,6 +40,19 @@ export async function sendSpringChat({ message, history }) {
   if (!response.ok) throw new Error(`Spring chat failed: ${response.status}`);
   const data = await response.json();
   return data.response || '';
+}
+
+export async function uploadSpringFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await springApiFetch('/api/read-file', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) throw new Error(`Spring file upload failed: ${response.status}`);
+  return response.json();
 }
 
 export async function loadLegacyCompassData() {
