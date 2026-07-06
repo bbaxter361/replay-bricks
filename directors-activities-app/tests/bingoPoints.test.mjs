@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addBingoTransaction, getBingoBalance } from '../src/utils/bingoPoints.js';
 
-test('adds and subtracts resident bingo points without automatic reset', () => {
+test('adds and subtracts resident Bingo Bucks without automatic reset', () => {
   const transactions = [];
   const earned = addBingoTransaction(transactions, {
     residentId: 'resident-harold',

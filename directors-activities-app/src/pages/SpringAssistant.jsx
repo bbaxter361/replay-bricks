@@ -54,10 +54,10 @@ export default function SpringAssistant() {
             <p className="font-black">Fill Month</p>
             <p className="mt-1 text-sm text-[#74638d]">Creates a review proposal.</p>
           </button>
-          <button className="app-card w-full p-4 text-left" onClick={() => send('Summarize residents and bingo points.')} type="button">
+          <button className="app-card w-full p-4 text-left" onClick={() => send('Summarize residents and Bingo Bucks.')} type="button">
             <UsersRound className="mb-3 text-[#6d4cc2]" />
             <p className="font-black">Review Residents</p>
-            <p className="mt-1 text-sm text-[#74638d]">Preferences, points, and attention.</p>
+            <p className="mt-1 text-sm text-[#74638d]">Preferences, Bingo Bucks, and attention.</p>
           </button>
         </aside>
       </div>

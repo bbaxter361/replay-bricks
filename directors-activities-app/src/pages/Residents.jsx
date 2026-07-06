@@ -1,4 +1,4 @@
-import { ClipboardCheck, Plus, Trophy } from 'lucide-react';
+import { ClipboardCheck, Plus, Trash2, Trophy, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
 import StatusPill from '../components/StatusPill';
@@ -10,10 +10,12 @@ export default function Residents() {
   const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [bingoBucks, setBingoBucks] = useState('');
   const [activityName, setActivityName] = useState('');
+  const [familyForm, setFamilyForm] = useState({ name: '', relationship: '', phone: '', email: '' });
   const selected = state.residents.find((resident) => resident.id === state.selectedResidentId) || state.residents[0];
   const balance = selected ? selectBingoBalance(state, selected.id) : 0;
   const transactions = state.bingoTransactions.filter((item) => item.residentId === selected?.id);
   const activityAttendance = (state.residentActivityAttendance || []).filter((item) => item.residentId === selected?.id);
+  const familyContacts = state.contacts.filter((contact) => contact.residentId === selected?.id);
 
   const addPoints = (amount, reason, createdAt) => {
     dispatch({ type: 'addBingoTransaction', transaction: { residentId: selected.id, amount, reason, createdAt } });
@@ -46,6 +48,29 @@ export default function Residents() {
     setIsActivityDialogOpen(false);
   };
 
+  const updateFamilyForm = (field, value) => {
+    setFamilyForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitFamilyContact = (event) => {
+    event.preventDefault();
+    const name = familyForm.name.trim();
+    if (!name) return;
+
+    dispatch({
+      type: 'addFamilyContact',
+      contact: {
+        residentId: selected.id,
+        name,
+        relationship: familyForm.relationship,
+        phone: familyForm.phone,
+        email: familyForm.email,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    setFamilyForm({ name: '', relationship: '', phone: '', email: '' });
+  };
+
   const formatEntryDate = (value) => {
     return new Date(value).toLocaleString([], {
       month: 'short',
@@ -57,7 +82,7 @@ export default function Residents() {
 
   return (
     <>
-      <SectionHeader eyebrow="Residents" title="People, Preferences, And Bingo Points">
+      <SectionHeader eyebrow="Residents" title="Resident Information">
         Resident profiles give Spring the context to choose better activities and help Amanda see who needs attention.
       </SectionHeader>
 
@@ -84,7 +109,7 @@ export default function Residents() {
               <div className="rounded-lg bg-[#efe4ff] p-4 text-center">
                 <Trophy className="mx-auto text-[#6d4cc2]" />
                 <p className="mt-1 text-3xl font-black">{balance}</p>
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#74638d]">Bingo points</p>
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#74638d]">Bingo Bucks</p>
               </div>
             </div>
 
@@ -110,6 +135,67 @@ export default function Residents() {
                         <span className="block text-xs text-[#9b8db0]">{formatEntryDate(item.createdAt)}</span>
                       </span>
                       <span className="font-black text-[#25183f]">{item.amount > 0 ? '+' : ''}{item.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-4 md:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-black">Family of Residents</h3>
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#9b8db0]">New resident paperwork</span>
+                </div>
+                <form className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" onSubmit={submitFamilyContact}>
+                  <input
+                    className="app-input"
+                    onChange={(event) => updateFamilyForm('name', event.target.value)}
+                    placeholder="Family member name"
+                    type="text"
+                    value={familyForm.name}
+                  />
+                  <input
+                    className="app-input"
+                    onChange={(event) => updateFamilyForm('relationship', event.target.value)}
+                    placeholder="Relationship"
+                    type="text"
+                    value={familyForm.relationship}
+                  />
+                  <input
+                    className="app-input"
+                    onChange={(event) => updateFamilyForm('phone', event.target.value)}
+                    placeholder="Phone"
+                    type="tel"
+                    value={familyForm.phone}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      className="app-input"
+                      onChange={(event) => updateFamilyForm('email', event.target.value)}
+                      placeholder="Email"
+                      type="email"
+                      value={familyForm.email}
+                    />
+                    <button className="app-button app-button-primary shrink-0" type="submit">
+                      <UserPlus size={16} /> Add
+                    </button>
+                  </div>
+                </form>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {familyContacts.map((contact) => (
+                    <div className="flex items-start justify-between gap-3 rounded-lg border border-[#eadff7] p-3 text-sm" key={contact.id}>
+                      <div>
+                        <p className="font-bold text-[#25183f]">{contact.name}</p>
+                        <p className="mt-1 text-[#74638d]">{contact.relationship || 'Family'}</p>
+                        <p className="mt-2 text-xs text-[#9b8db0]">{contact.phone}</p>
+                        <p className="text-xs text-[#9b8db0]">{contact.email}</p>
+                      </div>
+                      <button
+                        aria-label={`Delete ${contact.name}`}
+                        className="app-button app-button-secondary min-w-10 px-2"
+                        onClick={() => dispatch({ type: 'deleteFamilyContact', contactId: contact.id })}
+                        type="button"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   ))}
                 </div>

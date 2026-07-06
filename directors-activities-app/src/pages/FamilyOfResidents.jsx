@@ -1,12 +1,12 @@
 import SectionHeader from '../components/SectionHeader';
 import { useAppState } from '../state/appState';
 
-export default function Contacts() {
+export default function FamilyOfResidents() {
   const { state } = useAppState();
   return (
     <>
-      <SectionHeader eyebrow="Contacts" title="Family, Staff, And Care Contacts">
-        Contacts stay inside the same app so Spring can connect residents, families, and planning notes.
+      <SectionHeader eyebrow="Family" title="Family of Residents">
+        Family entries stay inside the same app so Spring can connect residents, loved ones, and planning notes.
       </SectionHeader>
       <div className="page-grid">
         {state.contacts.map((contact) => (

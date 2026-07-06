@@ -11,7 +11,7 @@ export default function Games() {
         <section className="app-card p-5">
           <Trophy className="text-[#6d4cc2]" />
           <h2 className="mt-4 text-xl font-black">Bingo Caller</h2>
-          <p className="mt-2 text-sm leading-6 text-[#74638d]">Keep bingo tied to resident profiles and points.</p>
+          <p className="mt-2 text-sm leading-6 text-[#74638d]">Keep Bingo Bucks tied to resident profiles.</p>
         </section>
         <section className="app-card p-5">
           <Blocks className="text-[#6d4cc2]" />

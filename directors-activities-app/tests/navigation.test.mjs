@@ -8,3 +8,7 @@ test('primary navigation starts with Amanda daily workflow order', () => {
     ['Home', 'Calendar', 'Spring', 'Activities', 'Canva'],
   );
 });
+
+test('family records are labeled Family of Residents in navigation', () => {
+  assert.equal(navItems.find((item) => item.to === '/app/family')?.label, 'Family of Residents');
+});

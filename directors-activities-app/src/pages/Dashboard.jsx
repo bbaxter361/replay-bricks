@@ -11,7 +11,7 @@ function formatTime(value) {
 
 export default function Dashboard() {
   const { state, dispatch } = useAppState();
-  const totalPoints = state.residents.reduce((sum, resident) => sum + selectBingoBalance(state, resident.id), 0);
+  const totalBingoBucks = state.residents.reduce((sum, resident) => sum + selectBingoBalance(state, resident.id), 0);
 
   return (
     <>
@@ -32,7 +32,7 @@ export default function Dashboard() {
         <MetricCard icon={CalendarDays} label="Today events" value={state.calendarEvents.length} detail="Ready for Canva export" />
         <MetricCard icon={FileCheck2} label="Draft activities" value={state.activityDrafts.length} detail="Review before saving" />
         <MetricCard icon={UsersRound} label="Residents" value={state.residents.length} detail="Profiles and preferences" />
-        <MetricCard icon={Trophy} label="Bingo points" value={totalPoints} detail="Never reset automatically" />
+        <MetricCard icon={Trophy} label="Bingo Bucks" value={totalBingoBucks} detail="Never reset automatically" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">

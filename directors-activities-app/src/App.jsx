@@ -5,8 +5,8 @@ import Activities from './pages/Activities';
 import Books from './pages/Books';
 import Calendar from './pages/Calendar';
 import CanvaExports from './pages/CanvaExports';
-import Contacts from './pages/Contacts';
 import Dashboard from './pages/Dashboard';
+import FamilyOfResidents from './pages/FamilyOfResidents';
 import Games from './pages/Games';
 import Residents from './pages/Residents';
 import Settings from './pages/Settings';
@@ -29,7 +29,8 @@ function AppRoutes() {
         <Route path="canva" element={<CanvaExports />} />
         <Route path="activities" element={<Activities />} />
         <Route path="residents" element={<Residents />} />
-        <Route path="contacts" element={<Contacts />} />
+        <Route path="family" element={<FamilyOfResidents />} />
+        <Route path="contacts" element={<Navigate to="/app/family" replace />} />
         <Route path="books" element={<Books />} />
         <Route path="games" element={<Games />} />
         <Route path="settings" element={<Settings />} />

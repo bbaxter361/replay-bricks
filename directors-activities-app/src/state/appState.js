@@ -16,6 +16,7 @@ import { loadLocalState, saveLocalState } from '../services/dataClient.js';
 import { approveActivityDraft as approveDraft } from '../utils/activityDrafts.js';
 import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints.js';
 import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning.js';
+import { addFamilyContact, deleteFamilyContact } from '../utils/familyContacts.js';
 import { addResidentActivityAttendance } from '../utils/residentAttendance.js';
 
 const AppStateContext = createContext(null);
@@ -63,7 +64,7 @@ function springReplyFor(message) {
     return 'I can turn websites, scans, and uploaded files into Activity drafts. Amanda will review and approve them before they become official.';
   }
   if (lower.includes('resident') || lower.includes('bingo')) {
-    return 'I can help summarize residents, preferences, attendance, and bingo points so Amanda can see who may need attention.';
+    return 'I can help summarize residents, preferences, attendance, and Bingo Bucks so Amanda can see who may need attention.';
   }
   return 'I am in local preview mode right now. The next phase will connect me to Amanda’s real saved data, Supabase, Canva, and the Obsidian archive.';
 }
@@ -125,6 +126,16 @@ export function appReducer(state, action) {
           createdBy: state.currentUser?.name || 'Amanda',
         }),
       };
+    case 'addFamilyContact':
+      return {
+        ...state,
+        contacts: addFamilyContact(state.contacts, {
+          ...action.contact,
+          createdBy: state.currentUser?.name || 'Amanda',
+        }),
+      };
+    case 'deleteFamilyContact':
+      return { ...state, contacts: deleteFamilyContact(state.contacts, action.contactId) };
     case 'addResidentActivityAttendance':
       return {
         ...state,

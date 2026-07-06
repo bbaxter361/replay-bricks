@@ -7,7 +7,7 @@ export const navItems = [
   { to: '/app/activities', label: 'Activities', icon: Sparkles },
   { to: '/app/canva', label: 'Canva', icon: Palette },
   { to: '/app/residents', label: 'Residents', icon: UsersRound },
-  { to: '/app/contacts', label: 'Contacts', icon: ContactRound },
+  { to: '/app/family', label: 'Family of Residents', icon: ContactRound },
   { to: '/app/books', label: 'Books', icon: BookOpen },
   { to: '/app/games', label: 'Games', icon: Gamepad2 },
   { to: '/app/settings', label: 'Settings', icon: Settings },
