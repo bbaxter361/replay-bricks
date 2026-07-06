@@ -28,6 +28,14 @@ export default function Dashboard() {
         The first screen keeps Amanda's daily priorities close: print calendars, ask Spring, and plan the day.
       </SectionHeader>
 
+      {state.legacyRestore && (
+        <div className="mb-4 rounded-lg border border-[#ded0f2] bg-white p-3 text-sm text-[#5a4873]">
+          {state.legacyRestore.error
+            ? `Amanda data restore needs attention: ${state.legacyRestore.error}`
+            : `Amanda data restored: ${state.legacyRestore.calendarEvents} calendar events, ${state.legacyRestore.books} books, ${state.legacyRestore.springMessages} Spring messages.`}
+        </div>
+      )}
+
       <div className="mb-5 grid gap-3 md:grid-cols-4">
         <MetricCard icon={CalendarDays} label="Today events" value={state.calendarEvents.length} detail="Ready for Canva export" />
         <MetricCard icon={FileCheck2} label="Draft activities" value={state.activityDrafts.length} detail="Review before saving" />

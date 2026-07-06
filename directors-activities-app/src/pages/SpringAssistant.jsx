@@ -1,23 +1,108 @@
 import { CalendarPlus, FilePlus2, Send, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
+import { sendSpringChat } from '../services/springApi.js';
 import { useAppState } from '../state/appState';
+import { parseSpringActions } from '../utils/springActions.js';
+
+function makeMessage(role, content) {
+  return {
+    id: `spring-${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export default function SpringAssistant() {
   const { state, dispatch } = useAppState();
   const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  const send = (text = message) => {
+  const applySpringActions = (actions) => {
+    actions.events.forEach((event) => {
+      if (!event?.title || !event?.start) return;
+      const start = new Date(event.start);
+      const end = new Date(event.end || start.getTime() + 45 * 60 * 1000);
+      dispatch({
+        type: 'addCalendarEvent',
+        event: {
+          id: `event-spring-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          activityId: event.activityId || '',
+          title: event.title,
+          start: Number.isNaN(start.getTime()) ? event.start : start.toISOString(),
+          end: Number.isNaN(end.getTime()) ? event.end || event.start : end.toISOString(),
+          wing: event.wing || 'both',
+          location: event.location || '',
+          description: event.description || '',
+          supplies: event.supplies || [],
+        },
+      });
+    });
+
+    actions.books.forEach((book) => {
+      if (!book?.title) return;
+      dispatch({
+        type: 'addBook',
+        book: {
+          title: book.title,
+          author: book.author || '',
+          pages: book.pages || 0,
+          dateCompleted: new Date().toISOString().slice(0, 10),
+          rating: 0,
+          status: 'bookshelf',
+        },
+      });
+    });
+
+    actions.contacts.forEach((contact) => {
+      if (!contact?.name) return;
+      dispatch({
+        type: 'addFamilyContact',
+        contact: {
+          residentId: contact.residentId || '',
+          name: contact.name,
+          relationship: contact.relationship || 'family',
+          phone: contact.phone || '',
+          email: contact.email || '',
+        },
+      });
+    });
+  };
+
+  const send = async (text = message) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    dispatch({ type: 'sendSpringMessage', message: trimmed });
+    if (!trimmed || isSending) return;
+    const userMessage = makeMessage('user', trimmed);
+    dispatch({ type: 'appendSpringMessage', message: userMessage });
     setMessage('');
+    setIsSending(true);
+
+    try {
+      const rawResponse = await sendSpringChat({
+        message: trimmed,
+        history: [...state.springMessages, userMessage],
+      });
+      const parsed = parseSpringActions(rawResponse);
+      applySpringActions(parsed);
+      dispatch({
+        type: 'appendSpringMessage',
+        message: makeMessage('assistant', parsed.displayText || 'Done. I handled that for you.'),
+      });
+    } catch {
+      dispatch({
+        type: 'appendSpringMessage',
+        message: makeMessage('assistant', "I'm having trouble connecting to Spring right now. The existing Spring backend may need a moment, then we can try again."),
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
     <>
       <SectionHeader eyebrow="Spring" title="Activities Director Assistant">
-        Spring is shown here in local preview mode. Real AI, Supabase memory, Canva, and Obsidian search come in later wiring phases.
+        Spring is connected to the existing live Spring backend and restored Compass data.
       </SectionHeader>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -39,7 +124,7 @@ export default function SpringAssistant() {
             }}
           >
             <input className="app-input" onChange={(event) => setMessage(event.target.value)} placeholder="Ask Spring to plan, draft, or summarize..." value={message} />
-            <button className="app-button app-button-primary" type="submit"><Send size={17} /></button>
+            <button className="app-button app-button-primary" disabled={isSending} type="submit"><Send size={17} /></button>
           </form>
         </section>
 

@@ -13,11 +13,13 @@ import {
   users,
 } from '../data/sampleData.js';
 import { loadLocalState, saveLocalState } from '../services/dataClient.js';
+import { loadLegacyCompassData } from '../services/springApi.js';
 import { approveActivityDraft as approveDraft } from '../utils/activityDrafts.js';
 import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints.js';
 import { addBook, deleteBook } from '../utils/bookShelf.js';
 import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning.js';
 import { addFamilyContact, deleteFamilyContact } from '../utils/familyContacts.js';
+import { mergeLegacyCompassData } from '../utils/legacyCompassData.js';
 import { addResidentActivityAttendance } from '../utils/residentAttendance.js';
 
 const AppStateContext = createContext(null);
@@ -50,6 +52,7 @@ export const initialState = {
   selectedAppNotice: null,
   canvaExportPreview: null,
   monthProposal: null,
+  legacyRestore: null,
 };
 
 function makeId(prefix) {
@@ -194,6 +197,24 @@ export function appReducer(state, action) {
       };
       return { ...state, springMessages: [...state.springMessages, userMessage, assistantMessage] };
     }
+    case 'appendSpringMessage':
+      return { ...state, springMessages: [...state.springMessages, action.message] };
+    case 'restoreLegacyCompassData':
+      return mergeLegacyCompassData(state, action.legacyData || {});
+    case 'legacyRestoreFailed':
+      return {
+        ...state,
+        legacyRestore: {
+          restoredAt: new Date().toISOString(),
+          error: action.error || 'Restore failed',
+          contacts: 0,
+          calendarEvents: 0,
+          books: 0,
+          springMessages: 0,
+        },
+      };
+    case 'addCalendarEvent':
+      return { ...state, calendarEvents: [action.event, ...state.calendarEvents] };
     default:
       return state;
   }
@@ -205,6 +226,21 @@ export function AppStateProvider({ children }) {
   useEffect(() => {
     saveLocalState(state);
   }, [state]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadLegacyCompassData()
+      .then((legacyData) => {
+        if (!cancelled) dispatch({ type: 'restoreLegacyCompassData', legacyData });
+      })
+      .catch((error) => {
+        if (!cancelled) dispatch({ type: 'legacyRestoreFailed', error: error.message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
 
