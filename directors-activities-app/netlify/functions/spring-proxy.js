@@ -15,7 +15,9 @@ const allowedPaths = new Set([
 
 export default async (req) => {
   const url = new URL(req.url);
-  const targetPath = url.pathname.replace(/^\/api\/spring-proxy/, '/api');
+  const targetPath = url.pathname
+    .replace(/^\/api\/spring-proxy/, '/api')
+    .replace(/^\/\.netlify\/functions\/spring-proxy/, '/api');
 
   if (!allowedPaths.has(targetPath)) {
     return Response.json({ error: 'Unsupported Spring proxy path.' }, { status: 404 });
@@ -40,5 +42,13 @@ export default async (req) => {
 };
 
 export const config = {
-  path: '/api/spring-proxy/*',
+  path: [
+    '/api/spring-proxy/chat',
+    '/api/spring-proxy/health',
+    '/api/spring-proxy/data/contacts',
+    '/api/spring-proxy/data/events',
+    '/api/spring-proxy/data/chatHistory',
+    '/api/spring-proxy/data/conversations',
+    '/api/spring-proxy/data/books',
+  ],
 };
