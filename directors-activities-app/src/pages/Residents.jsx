@@ -1,4 +1,4 @@
-import { Gift, Minus, Plus, Trophy } from 'lucide-react';
+import { ClipboardCheck, Plus, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import SectionHeader from '../components/SectionHeader';
 import StatusPill from '../components/StatusPill';
@@ -7,10 +7,13 @@ import { selectBingoBalance, useAppState } from '../state/appState';
 export default function Residents() {
   const { state, dispatch } = useAppState();
   const [isBingoDialogOpen, setIsBingoDialogOpen] = useState(false);
+  const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [bingoBucks, setBingoBucks] = useState('');
+  const [activityName, setActivityName] = useState('');
   const selected = state.residents.find((resident) => resident.id === state.selectedResidentId) || state.residents[0];
   const balance = selected ? selectBingoBalance(state, selected.id) : 0;
   const transactions = state.bingoTransactions.filter((item) => item.residentId === selected?.id);
+  const activityAttendance = (state.residentActivityAttendance || []).filter((item) => item.residentId === selected?.id);
 
   const addPoints = (amount, reason, createdAt) => {
     dispatch({ type: 'addBingoTransaction', transaction: { residentId: selected.id, amount, reason, createdAt } });
@@ -24,6 +27,23 @@ export default function Residents() {
     addPoints(amount, 'Attended bingo', new Date().toISOString());
     setBingoBucks('');
     setIsBingoDialogOpen(false);
+  };
+
+  const submitActivityAttendance = (event) => {
+    event.preventDefault();
+    const trimmedActivityName = activityName.trim();
+    if (!trimmedActivityName) return;
+
+    dispatch({
+      type: 'addResidentActivityAttendance',
+      attendance: {
+        residentId: selected.id,
+        activityName: trimmedActivityName,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    setActivityName('');
+    setIsActivityDialogOpen(false);
   };
 
   const formatEntryDate = (value) => {
@@ -70,9 +90,7 @@ export default function Residents() {
 
             <div className="mb-5 flex flex-wrap gap-2">
               <button className="app-button app-button-primary" onClick={() => setIsBingoDialogOpen(true)} type="button"><Plus size={16} /> Attended bingo</button>
-              <button className="app-button app-button-secondary" onClick={() => addPoints(1, 'Manual add')} type="button"><Plus size={16} /> Add 1</button>
-              <button className="app-button app-button-secondary" onClick={() => addPoints(-1, 'Manual subtract')} type="button"><Minus size={16} /> Subtract 1</button>
-              <button className="app-button app-button-secondary" onClick={() => addPoints(-5, 'Redeemed prize')} type="button"><Gift size={16} /> Redeem prize</button>
+              <button className="app-button app-button-secondary" onClick={() => setIsActivityDialogOpen(true)} type="button"><ClipboardCheck size={16} /> Attended Activity</button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -92,6 +110,17 @@ export default function Residents() {
                         <span className="block text-xs text-[#9b8db0]">{formatEntryDate(item.createdAt)}</span>
                       </span>
                       <span className="font-black text-[#25183f]">{item.amount > 0 ? '+' : ''}{item.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white p-4 md:col-span-2">
+                <h3 className="font-black">Activity Attendance</h3>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {activityAttendance.map((item) => (
+                    <div className="rounded-lg border border-[#eadff7] p-3 text-sm" key={item.id}>
+                      <p className="font-bold text-[#25183f]">{item.activityName}</p>
+                      <p className="mt-1 text-xs text-[#9b8db0]">{formatEntryDate(item.createdAt)}</p>
                     </div>
                   ))}
                 </div>
@@ -128,6 +157,37 @@ export default function Residents() {
               </button>
               <button className="app-button app-button-primary" type="submit">
                 Save Bingo Bucks
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isActivityDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#25183f]/35 px-4">
+          <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onSubmit={submitActivityAttendance}>
+            <h2 className="text-xl font-black text-[#25183f]">Enter the activity attended</h2>
+            <p className="mt-2 text-sm leading-6 text-[#74638d]">
+              This will be saved for {selected.name} with the current date and time.
+            </p>
+            <label className="mt-4 block text-sm font-bold text-[#5a4873]" htmlFor="activity-attended">
+              Activity
+            </label>
+            <input
+              autoFocus
+              className="app-input mt-2"
+              id="activity-attended"
+              onChange={(event) => setActivityName(event.target.value)}
+              placeholder="Enter activity name"
+              type="text"
+              value={activityName}
+            />
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button className="app-button app-button-secondary" onClick={() => setIsActivityDialogOpen(false)} type="button">
+                Cancel
+              </button>
+              <button className="app-button app-button-primary" type="submit">
+                Save Activity
               </button>
             </div>
           </form>

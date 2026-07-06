@@ -131,6 +131,11 @@ export const bingoTransactions = [
   { id: 'bingo-2', residentId: 'resident-harold', amount: 5, reason: 'Attended bingo', createdBy: 'Amanda', createdAt: '2026-07-02T15:00:00' },
 ];
 
+export const residentActivityAttendance = [
+  { id: 'attendance-1', residentId: 'resident-mary', activityName: 'Watercolor Flowers', createdBy: 'Amanda', createdAt: '2026-07-01T10:00:00' },
+  { id: 'attendance-2', residentId: 'resident-harold', activityName: 'Golden Oldies Singalong', createdBy: 'Amanda', createdAt: '2026-07-03T14:00:00' },
+];
+
 export const calendarEvents = [
   {
     id: 'event-1',

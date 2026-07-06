@@ -8,13 +8,15 @@ import {
   canvaTemplates,
   contacts,
   portalApps,
+  residentActivityAttendance,
   residents,
   users,
-} from '../data/sampleData';
-import { loadLocalState, saveLocalState } from '../services/dataClient';
-import { approveActivityDraft as approveDraft } from '../utils/activityDrafts';
-import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints';
-import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning';
+} from '../data/sampleData.js';
+import { loadLocalState, saveLocalState } from '../services/dataClient.js';
+import { approveActivityDraft as approveDraft } from '../utils/activityDrafts.js';
+import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints.js';
+import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning.js';
+import { addResidentActivityAttendance } from '../utils/residentAttendance.js';
 
 const AppStateContext = createContext(null);
 
@@ -26,6 +28,7 @@ export const initialState = {
   activities,
   activityDrafts,
   residents,
+  residentActivityAttendance,
   bingoTransactions,
   calendarEvents,
   contacts,
@@ -119,6 +122,14 @@ export function appReducer(state, action) {
         ...state,
         bingoTransactions: addPointsTransaction(state.bingoTransactions, {
           ...action.transaction,
+          createdBy: state.currentUser?.name || 'Amanda',
+        }),
+      };
+    case 'addResidentActivityAttendance':
+      return {
+        ...state,
+        residentActivityAttendance: addResidentActivityAttendance(state.residentActivityAttendance || [], {
+          ...action.attendance,
           createdBy: state.currentUser?.name || 'Amanda',
         }),
       };
