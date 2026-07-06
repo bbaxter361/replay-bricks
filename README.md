@@ -24,3 +24,6 @@ AI-powered activities director app with custom calendar, contacts database, and 
 
 ### 3. Bricqer Replacement (Codename: "Hold") 
 Private inventory management system syncing BrickLink, Brick Owl, and eBay — replaces $50/mo Bricqer subscription. Located in `/hold/`.
+
+### 4. Director's Activities App
+New local preview of Amanda's unified Spring/Compass workspace. Located in `/directors-activities-app/`.

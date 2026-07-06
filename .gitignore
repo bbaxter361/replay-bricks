@@ -6,3 +6,5 @@ compass/dist/
 compass-api/.env
 *.zip
 *.log
+directors-activities-app/dist/
+directors-activities-app/.env
