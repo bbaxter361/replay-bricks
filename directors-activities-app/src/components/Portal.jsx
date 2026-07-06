@@ -35,27 +35,27 @@ export default function Portal() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f1ff] px-4 py-6 text-[#25183f]">
+    <main className="min-h-screen bg-[#f6f7fb] px-4 py-6 text-[#202232]">
       <div className="mx-auto max-w-6xl">
-        <section className="mb-6 rounded-lg bg-[#6d4cc2] p-6 text-white shadow-xl shadow-purple-900/10 md:p-8">
+        <section className="mb-6 rounded-lg border border-[#d9dee8] bg-white p-6 shadow-xl shadow-slate-900/5 md:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/14 px-3 py-1 text-sm font-bold">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#eef2f7] px-3 py-1 text-sm font-bold text-[#4b5565]">
                 <ShieldCheck size={16} />
                 Private portal preview
               </div>
               <h1 className="max-w-2xl text-3xl font-black md:text-5xl">Director's Activities App</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-purple-50 md:text-base">
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#667085] md:text-base">
                 A warm, professional workspace for Spring, calendars, residents, activities, and Amanda's daily print flow.
               </p>
             </div>
-            <div className="rounded-lg border border-white/20 bg-white/10 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-purple-100">Preview as</p>
+            <div className="rounded-lg border border-[#d9dee8] bg-[#f8fafc] p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#667085]">Preview as</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {state.users.map((user) => (
                   <button
                     className={`rounded-lg px-3 py-2 text-sm font-bold transition ${
-                      selectedUserId === user.id ? 'bg-white text-[#4d3195]' : 'bg-white/12 text-white hover:bg-white/20'
+                      selectedUserId === user.id ? 'bg-[#202232] text-white' : 'bg-white text-[#4b5565] hover:bg-[#eef2f7]'
                     }`}
                     key={user.id}
                     onClick={() => {
@@ -73,7 +73,7 @@ export default function Portal() {
         </section>
 
         {state.selectedAppNotice && (
-          <div className="app-card mb-5 flex items-center gap-3 p-4 text-sm text-[#5a4873]">
+          <div className="mb-5 flex items-center gap-3 rounded-lg border border-[#d9dee8] bg-white p-4 text-sm text-[#4b5565]">
             <Sparkles className="text-[#6d4cc2]" size={18} />
             {state.selectedAppNotice}
           </div>
@@ -82,11 +82,12 @@ export default function Portal() {
         <section className="page-grid">
           {visibleApps.map((app) => {
             const Icon = iconByApp[app.id] || Sparkles;
+            const isDirector = app.id === 'directors';
             return (
-              <button className="app-card text-left transition hover:-translate-y-0.5 hover:border-[#6d4cc2]" key={app.id} onClick={() => openApp(app)} type="button">
+              <button className="rounded-lg border border-[#d9dee8] bg-white text-left shadow-xl shadow-slate-900/5 transition hover:-translate-y-0.5 hover:border-[#98a2b3]" key={app.id} onClick={() => openApp(app)} type="button">
                 <div className="flex h-full flex-col gap-5 p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#efe4ff] text-[#6d4cc2]">
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${isDirector ? 'bg-[#efe4ff] text-[#6d4cc2]' : 'bg-[#eef2f7] text-[#344054]'}`}>
                       <Icon size={24} />
                     </div>
                     <StatusPill tone={app.status === 'local-preview' ? 'green' : 'gold'}>{app.status}</StatusPill>
@@ -95,7 +96,7 @@ export default function Portal() {
                     <h2 className="text-xl font-black">{app.name}</h2>
                     <p className="mt-2 text-sm leading-6 text-[#74638d]">{app.subtitle}</p>
                   </div>
-                  <div className="mt-auto flex items-center gap-2 text-sm font-black text-[#6d4cc2]">
+                  <div className={`mt-auto flex items-center gap-2 text-sm font-black ${isDirector ? 'text-[#6d4cc2]' : 'text-[#344054]'}`}>
                     {app.id === 'directors' ? 'Open app' : 'Preview visibility'}
                     <ArrowRight size={16} />
                   </div>

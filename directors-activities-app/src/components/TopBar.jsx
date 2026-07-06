@@ -1,4 +1,4 @@
-import { LogOut, UserRound } from 'lucide-react';
+import { ArrowLeft, LogOut, UserRound } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { navItems } from '../navigation';
@@ -13,6 +13,10 @@ export default function TopBar() {
     navigate('/');
   };
 
+  const backToPortal = () => {
+    navigate('/');
+  };
+
   return (
     <header className="sticky top-0 z-20 border-b border-[#ded0f2] bg-[#f7f1ff]/90 px-4 py-3 backdrop-blur lg:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -21,6 +25,10 @@ export default function TopBar() {
           <p className="font-black text-[#25183f]">Amanda's daily workspace</p>
         </div>
         <div className="flex items-center gap-2">
+          <button className="app-button app-button-secondary" onClick={backToPortal} type="button">
+            <ArrowLeft size={16} />
+            Portal
+          </button>
           <div className="flex items-center gap-2 rounded-lg border border-[#ded0f2] bg-white px-3 py-2 text-sm font-bold text-[#4d3195]">
             <UserRound size={16} />
             {state.currentUser?.name}
