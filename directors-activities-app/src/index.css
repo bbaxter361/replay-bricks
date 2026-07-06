@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  color: #25183f;
-  background: #f7f1ff;
+  --app-bg: #f7f1ff;
+  --app-surface: #fffafe;
+  --app-surface-2: #efe4ff;
+  --app-text: #25183f;
+  --app-muted: #74638d;
+  --app-primary: #6d4cc2;
+  --app-primary-strong: #4d3195;
+  --app-accent: #d27bd5;
+  --app-care: #6aaea7;
+  --app-warm: #f4b86a;
+  --app-border: #ded0f2;
+  color: var(--app-text);
+  background: var(--app-bg);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -21,4 +32,77 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-card {
+  background: rgba(255, 250, 254, 0.88);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  box-shadow: 0 14px 40px rgba(64, 39, 112, 0.08);
+}
+
+.app-button {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.65rem 0.95rem;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.app-button:active {
+  transform: translateY(1px);
+}
+
+.app-button-primary {
+  background: var(--app-primary);
+  color: white;
+}
+
+.app-button-primary:hover {
+  background: var(--app-primary-strong);
+}
+
+.app-button-secondary {
+  background: white;
+  border: 1px solid var(--app-border);
+  color: var(--app-primary-strong);
+}
+
+.app-button-secondary:hover {
+  border-color: var(--app-primary);
+}
+
+.app-input {
+  background: white;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  color: var(--app-text);
+  min-height: 2.6rem;
+  outline: none;
+  padding: 0.65rem 0.8rem;
+  width: 100%;
+}
+
+.app-input:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 3px rgba(109, 76, 194, 0.16);
+}
+
+.page-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
