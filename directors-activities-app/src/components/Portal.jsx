@@ -44,9 +44,10 @@ export default function Portal() {
                 <ShieldCheck size={16} />
                 Private portal preview
               </div>
-              <h1 className="max-w-2xl text-3xl font-black md:text-5xl">Director's Activities App</h1>
+              <h1 className="max-w-2xl text-3xl font-black md:text-5xl">Compass Portal</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-[#667085] md:text-base">
-                A warm, professional workspace for Spring, calendars, residents, activities, and Amanda's daily print flow.
+                Choose the app you need below. Director's Activities App opens Spring, calendars, residents, activities,
+                and Amanda's daily print flow.
               </p>
             </div>
             <div className="rounded-lg border border-[#d9dee8] bg-[#f8fafc] p-4">
