@@ -85,6 +85,17 @@ test('Calendar activities open a click-to-edit calendar editor', () => {
   assert.doesNotMatch(source, /Yearly/);
 });
 
+test('Dashboard today schedule filters calendar events to the current day', () => {
+  const dashboard = readFileSync(new URL('../src/pages/Dashboard.jsx', import.meta.url), 'utf8');
+
+  assert.match(dashboard, /const todayEvents = state\.calendarEvents/);
+  assert.match(dashboard, /\.filter\(\(event\) => localDateKey\(event\.start\) === todayKey\)/);
+  assert.match(dashboard, /value=\{todayEvents\.length\}/);
+  assert.match(dashboard, /\{todayEvents\.map\(\(event\) =>/);
+  assert.match(dashboard, /Nothing is scheduled for today\./);
+  assert.doesNotMatch(dashboard, /\{state\.calendarEvents\.map\(\(event\) =>/);
+});
+
 test('Books screen opens editable book detail records', () => {
   const source = readFileSync(new URL('../src/pages/Books.jsx', import.meta.url), 'utf8');
 

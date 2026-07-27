@@ -11,10 +11,24 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function localDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 export default function Dashboard() {
   const { state, dispatch } = useAppState();
   const [editingEvent, setEditingEvent] = useState(null);
   const totalBingoBucks = state.residents.reduce((sum, resident) => sum + selectBingoBalance(state, resident.id), 0);
+  const todayKey = localDateKey(new Date());
+  const todayEvents = state.calendarEvents
+    .filter((event) => localDateKey(event.start) === todayKey)
+    .sort((left, right) => new Date(left.start) - new Date(right.start));
 
   const saveEvent = (eventId, updates) => {
     dispatch({
@@ -59,7 +73,7 @@ export default function Dashboard() {
       )}
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
-        <MetricCard icon={CalendarDays} label="Today events" value={state.calendarEvents.length} detail="Ready for Canva export" to="/app/calendar" />
+        <MetricCard icon={CalendarDays} label="Today events" value={todayEvents.length} detail="Ready for Canva export" to="/app/calendar" />
         <MetricCard icon={FileCheck2} label="Draft activities" value={state.activityDrafts.length} detail="Review before saving" to="/app/activities?view=drafts" />
         <MetricCard icon={UsersRound} label="Residents" value={state.residents.length} detail="Profiles and preferences" to="/app/residents" />
         <MetricCard icon={Trophy} label="Bingo Bucks" value={totalBingoBucks} detail="Never reset automatically" to="/app/residents" />
@@ -72,7 +86,7 @@ export default function Dashboard() {
             <StatusPill tone="green">Combined view</StatusPill>
           </div>
           <div className="space-y-3">
-            {state.calendarEvents.map((event) => (
+            {todayEvents.map((event) => (
               <button className="w-full rounded-lg border border-[#ded0f2] bg-white p-4 text-left hover:border-[#6d4cc2]" key={event.id} onClick={() => setEditingEvent(event)} type="button">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -84,6 +98,11 @@ export default function Dashboard() {
                 <p className="mt-2 text-sm leading-6 text-[#74638d]">{event.description}</p>
               </button>
             ))}
+            {todayEvents.length === 0 && (
+              <div className="rounded-lg border border-dashed border-[#ded0f2] bg-white p-4 text-sm font-bold text-[#74638d]">
+                Nothing is scheduled for today.
+              </div>
+            )}
           </div>
         </section>
 
