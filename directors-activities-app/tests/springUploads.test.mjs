@@ -21,6 +21,16 @@ test('Spring API can upload a file and pass extracted text into chat', async () 
   assert.match(source, /fileName/);
 });
 
+test('Spring keeps extracted file context in chat history for follow-up messages', async () => {
+  const source = await readFile(new URL('../src/pages/SpringAssistant.jsx', import.meta.url), 'utf8');
+
+  assert.match(source, /fileContextMessage/);
+  assert.match(source, /appendSpringMessage', message: fileContextMessage/);
+  assert.match(source, /historyForApi = \[\.\.\.state\.springMessages, userMessage, fileContextMessage\]/);
+  assert.match(source, /hidden: true/);
+  assert.match(source, /state\.springMessages\.filter\(\(item\) => !item\.hidden\)/);
+});
+
 test('Spring proxy allows multipart file upload to the live read-file endpoint', async () => {
   const source = await readFile(new URL('../netlify/functions/spring-proxy.js', import.meta.url), 'utf8');
 

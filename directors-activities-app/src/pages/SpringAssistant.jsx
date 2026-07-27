@@ -105,9 +105,24 @@ export default function SpringAssistant() {
         removeFile();
       }
 
+      // If a file was uploaded, inject its extracted text into a context message
+      // that persists in chat history so Spring can refer back on follow-up turns.
+      let historyForApi = [...state.springMessages, userMessage];
+      let messageForApi = trimmed || 'Please review this upload and help me turn it into something useful for activities.';
+      if (uploadedFile?.text) {
+        const fileText = uploadedFile.text.substring(0, 50000);
+        const fence = '```';
+        // Add a context message with the full file text so it persists in history
+        const contextText = '[File context — ' + uploadedFile.fileName + ']\n\nFull extracted contents:\n' + fence + '\n' + fileText + '\n' + fence + '\n\nSpring can refer back to this content when Amanda asks follow-up questions about this file.';
+        const fileContextMessage = { ...makeMessage('assistant', contextText), hidden: true };
+        dispatch({ type: 'appendSpringMessage', message: fileContextMessage });
+        historyForApi = [...state.springMessages, userMessage, fileContextMessage];
+        messageForApi = (trimmed || 'Please review this upload and help me turn it into something useful for activities.') + '\n\n[File: ' + uploadedFile.fileName + ']\n\nContents:\n' + fence + '\n' + fileText + '\n' + fence;
+      }
+
       const rawResponse = await sendSpringChat({
-        message: trimmed || 'Please review this upload and help me turn it into something useful for activities.',
-        history: [...state.springMessages, userMessage],
+        message: messageForApi,
+        history: historyForApi,
         docText: uploadedFile?.text,
         fileName: uploadedFile?.fileName || attachedFile?.name,
         skillPrompt: buildSpringSkillPrompt({ state, currentPath: window.location.pathname }),
@@ -161,7 +176,7 @@ export default function SpringAssistant() {
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <section className="app-card flex h-[clamp(360px,calc(100dvh-18rem),560px)] min-h-0 flex-col p-4">
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-            {state.springMessages.map((item) => (
+            {state.springMessages.filter((item) => !item.hidden).map((item) => (
               <div className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`} key={item.id}>
                 <div className={`max-w-[78%] rounded-lg p-3 text-sm leading-6 ${item.role === 'user' ? 'bg-[#6d4cc2] text-white' : 'bg-white text-[#25183f] border border-[#ded0f2]'}`}>
                   {item.content}

@@ -1,5 +1,7 @@
 import { CalendarDays, FileCheck2, MessageCircle, Trophy, UsersRound } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import CalendarEventEditor from '../components/CalendarEventEditor';
 import MetricCard from '../components/MetricCard';
 import SectionHeader from '../components/SectionHeader';
 import StatusPill from '../components/StatusPill';
@@ -11,7 +13,27 @@ function formatTime(value) {
 
 export default function Dashboard() {
   const { state, dispatch } = useAppState();
+  const [editingEvent, setEditingEvent] = useState(null);
   const totalBingoBucks = state.residents.reduce((sum, resident) => sum + selectBingoBalance(state, resident.id), 0);
+
+  const saveEvent = (eventId, updates) => {
+    dispatch({
+      type: 'updateCalendarEvent',
+      eventId,
+      updates,
+      audit: { recordType: 'calendar', recordId: eventId, action: 'update', changes: updates },
+    });
+    setEditingEvent(null);
+  };
+
+  const deleteEvent = (eventId) => {
+    dispatch({
+      type: 'deleteCalendarEvent',
+      eventId,
+      audit: { recordType: 'calendar', recordId: eventId, action: 'delete', changes: { title: editingEvent?.title } },
+    });
+    setEditingEvent(null);
+  };
 
   return (
     <>
@@ -51,7 +73,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-3">
             {state.calendarEvents.map((event) => (
-              <div className="rounded-lg border border-[#ded0f2] bg-white p-4" key={event.id}>
+              <button className="w-full rounded-lg border border-[#ded0f2] bg-white p-4 text-left hover:border-[#6d4cc2]" key={event.id} onClick={() => setEditingEvent(event)} type="button">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-black text-[#25183f]">{event.title}</p>
@@ -60,7 +82,7 @@ export default function Dashboard() {
                   <StatusPill>{event.wing}</StatusPill>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-[#74638d]">{event.description}</p>
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -94,6 +116,7 @@ export default function Dashboard() {
           </section>
         </aside>
       </div>
+      <CalendarEventEditor event={editingEvent} onClose={() => setEditingEvent(null)} onDelete={deleteEvent} onSave={saveEvent} />
     </>
   );
 }

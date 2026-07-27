@@ -1,4 +1,6 @@
 import { CalendarPlus } from 'lucide-react';
+import { useState } from 'react';
+import CalendarEventEditor from '../components/CalendarEventEditor';
 import SectionHeader from '../components/SectionHeader';
 import StatusPill from '../components/StatusPill';
 import { useAppState } from '../state/appState';
@@ -36,17 +38,17 @@ function monthCells(referenceDate) {
   });
 }
 
-function CalendarEventCard({ event }) {
+function CalendarEventCard({ event, onEdit }) {
   return (
-    <div className="rounded-lg border border-[#ded0f2] bg-white p-4">
+    <button className="w-full rounded-lg border border-[#ded0f2] bg-white p-4 text-left hover:border-[#6d4cc2]" onClick={() => onEdit(event)} type="button">
       <p className="font-black">{event.title}</p>
       <p className="mt-1 text-sm text-[#74638d]">{timeRange(event)} · {event.location}</p>
       <p className="mt-2 text-sm leading-6 text-[#74638d]">{event.description}</p>
-    </div>
+    </button>
   );
 }
 
-function MonthCalendarView({ events }) {
+function MonthCalendarView({ events, onEdit }) {
   const sortedEvents = [...events].sort((left, right) => new Date(left.start) - new Date(right.start));
   const referenceDate = sortedEvents[0] ? new Date(sortedEvents[0].start) : new Date();
   const eventMap = sortedEvents.reduce((map, event) => {
@@ -79,10 +81,10 @@ function MonthCalendarView({ events }) {
                   </div>
                   <div className="space-y-1.5">
                     {dayEvents.map((event) => (
-                      <div className="rounded-md border border-[#ded0f2] bg-[#f7f1ff] px-2 py-1 text-xs leading-4 text-[#25183f]" key={event.id}>
+                      <button className="w-full rounded-md border border-[#ded0f2] bg-[#f7f1ff] px-2 py-1 text-left text-xs leading-4 text-[#25183f] hover:border-[#6d4cc2]" key={event.id} onClick={() => onEdit(event)} type="button">
                         <p className="font-black">{new Date(event.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
                         <p className="font-bold">{event.title}</p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -97,9 +99,29 @@ function MonthCalendarView({ events }) {
 
 export default function Calendar() {
   const { state, dispatch } = useAppState();
+  const [editingEvent, setEditingEvent] = useState(null);
   const filteredEvents = state.wingFilter === 'combined'
     ? state.calendarEvents
     : state.calendarEvents.filter((event) => event.wing === state.wingFilter || event.wing === 'both');
+
+  const saveEvent = (eventId, updates) => {
+    dispatch({
+      type: 'updateCalendarEvent',
+      eventId,
+      updates,
+      audit: { recordType: 'calendar', recordId: eventId, action: 'update', changes: updates },
+    });
+    setEditingEvent(null);
+  };
+
+  const deleteEvent = (eventId) => {
+    dispatch({
+      type: 'deleteCalendarEvent',
+      eventId,
+      audit: { recordType: 'calendar', recordId: eventId, action: 'delete', changes: { title: editingEvent?.title } },
+    });
+    setEditingEvent(null);
+  };
 
   return (
     <>
@@ -131,10 +153,10 @@ export default function Calendar() {
             <StatusPill>{state.wingFilter}</StatusPill>
           </div>
           {state.calendarView === 'month' ? (
-            <MonthCalendarView events={filteredEvents} />
+            <MonthCalendarView events={filteredEvents} onEdit={setEditingEvent} />
           ) : (
             <div className="space-y-3">
-              {filteredEvents.map((event) => <CalendarEventCard event={event} key={event.id} />)}
+              {filteredEvents.map((event) => <CalendarEventCard event={event} key={event.id} onEdit={setEditingEvent} />)}
             </div>
           )}
         </section>
@@ -160,6 +182,7 @@ export default function Calendar() {
           )}
         </aside>
       </div>
+      <CalendarEventEditor event={editingEvent} onClose={() => setEditingEvent(null)} onDelete={deleteEvent} onSave={saveEvent} />
     </>
   );
 }
