@@ -154,8 +154,8 @@ export default function SpringAssistant() {
       </SectionHeader>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <section className="app-card flex min-h-[560px] flex-col p-4">
-          <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <section className="app-card flex h-[clamp(360px,calc(100dvh-18rem),560px)] min-h-0 flex-col p-4">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {state.springMessages.map((item) => (
               <div className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`} key={item.id}>
                 <div className={`max-w-[78%] rounded-lg p-3 text-sm leading-6 ${item.role === 'user' ? 'bg-[#6d4cc2] text-white' : 'bg-white text-[#25183f] border border-[#ded0f2]'}`}>
