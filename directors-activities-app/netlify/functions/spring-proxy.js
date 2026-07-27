@@ -11,6 +11,8 @@ const allowedPaths = new Set([
   '/api/data/chatHistory',
   '/api/data/conversations',
   '/api/data/books',
+  '/api/brain/memories',
+  '/api/brain/export',
   '/api/read-file',
 ]);
 
@@ -54,6 +56,8 @@ export const config = {
     '/api/spring-proxy/data/chatHistory',
     '/api/spring-proxy/data/conversations',
     '/api/spring-proxy/data/books',
+    '/api/spring-proxy/brain/memories',
+    '/api/spring-proxy/brain/export',
     '/api/spring-proxy/read-file',
   ],
 };

@@ -1,7 +1,7 @@
 import { Send, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { sendSpringChat } from '../services/springApi.js';
+import { loadSpringBrainMemories, sendSpringChat } from '../services/springApi.js';
 import { useAppState } from '../state/appState';
 import { applySpringActionsToDispatch, hasSpringActions } from '../utils/applySpringActions.js';
 import { parseSpringActions } from '../utils/springActions.js';
@@ -43,10 +43,11 @@ export default function SpringQuickAsk() {
         return;
       }
 
+      const brainMemories = await loadSpringBrainMemories({ limit: 30 }).catch(() => []);
       const rawResponse = await sendSpringChat({
         message: trimmed,
         history: [...state.springMessages, userMessage],
-        skillPrompt: buildSpringSkillPrompt({ state, currentPath: location.pathname }),
+        skillPrompt: buildSpringSkillPrompt({ state, memories: brainMemories, currentPath: location.pathname }),
       });
       const parsed = parseSpringActions(rawResponse);
       const actionSource = hasSpringActions(parsed)

@@ -1,9 +1,112 @@
 import { detectAttendancePatterns, recommendActivitiesForResident } from './springAdmin.js';
+import { getBingoBalance } from './bingoPoints.js';
 
 function residentOptions(state) {
   return (state.residents || [])
     .map((resident) => `${resident.name} (${resident.id})`)
     .join(', ');
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return date.toLocaleString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function truncate(value, length = 140) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > length ? `${text.slice(0, length - 3)}...` : text;
+}
+
+function recentVisibleSpringMessages(state) {
+  return (state.springMessages || [])
+    .filter((message) => !message.hidden && message.content && message.id !== 'spring-welcome')
+    .slice(-8)
+    .map((message) => `- ${message.role}: ${truncate(message.content, 180)}`)
+    .join('\n');
+}
+
+function residentContext(state) {
+  return (state.residents || [])
+    .map((resident) => {
+      const balance = getBingoBalance(resident.id, state.bingoTransactions || []);
+      const interests = (resident.interests || []).join(', ') || 'none listed';
+      return `- ${resident.name} (${resident.careArea || 'unknown wing'}): ${balance} Bingo Bucks; interests: ${interests}; notes: ${truncate(resident.notes, 90) || 'none'}`;
+    })
+    .join('\n');
+}
+
+function upcomingEventContext(state, now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+
+  return (state.calendarEvents || [])
+    .filter((event) => {
+      const date = new Date(event.start);
+      return !Number.isNaN(date.getTime()) && date >= start && date < end;
+    })
+    .sort((left, right) => new Date(left.start) - new Date(right.start))
+    .slice(0, 40)
+    .map((event) => {
+      const endTime = new Date(event.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return `- ${formatDateTime(event.start)}-${endTime}: ${event.title} (${event.wing || 'both'}, ${event.location || 'no location'})`;
+    })
+    .join('\n');
+}
+
+function upcomingEventListForReply(state, now = new Date()) {
+  const context = upcomingEventContext(state, now);
+  if (!context) return 'I do not see any events scheduled in the next 7 days.';
+  return `Here is what I see on the calendar for the next 7 days:\n${context}`;
+}
+
+function bookContext(state) {
+  return (state.books || [])
+    .slice(0, 20)
+    .map((book) => `- ${book.title}${book.author ? ` by ${book.author}` : ''}${book.status ? ` (${book.status})` : ''}`)
+    .join('\n');
+}
+
+function memoryContext(memories = []) {
+  return memories
+    .filter((memory) => memory?.principle || memory?.topic)
+    .slice(0, 30)
+    .map((memory) => `- ${memory.topic || 'memory'}: ${truncate(memory.principle || memory.content || '', 180)}`)
+    .join('\n');
+}
+
+export function buildSpringContextFromData({ state, memories = [], now = new Date() }) {
+  const residents = residentContext(state);
+  const events = upcomingEventContext(state, now);
+  const books = bookContext(state);
+  const recentChat = recentVisibleSpringMessages(state);
+  const brain = memoryContext(memories);
+
+  return `## COMPASS LIVE DATA
+This is the current saved Compass app state. Use it as Spring's working memory. Do not tell Amanda you cannot see residents, Bingo Bucks, books, or calendar items when they are listed here.
+
+Residents and Bingo Bucks:
+${residents || '- No residents saved yet.'}
+
+Calendar events in the next 7 days:
+${events || '- No events scheduled in the next 7 days.'}
+
+Books:
+${books || '- No books saved yet.'}
+
+Recent Spring conversation:
+${recentChat || '- No recent visible Spring messages.'}
+
+Recent Spring brain memories:
+${brain || '- No brain memories loaded for this request.'}`;
 }
 
 function normalize(value) {
@@ -134,7 +237,7 @@ function gameIdFromMessage(message) {
   return '';
 }
 
-export function buildSpringSkillPrompt({ state, currentPath }) {
+export function buildSpringSkillPrompt({ state, currentPath, memories = [], now = new Date() }) {
   return `Spring Director Skills
 
 You are Spring, Amanda's Activities Director assistant. You help create reviewable records inside the Director's Activities App. Do not give up when details are missing. Ask Amanda one clear follow-up question and explain what you still need.
@@ -144,6 +247,8 @@ Current app location: ${currentPath || '/app/spring'}
 Known residents: ${residentOptions(state)}
 Known data areas: activities, calendar events, games, resident profiles, family records, books, Bingo Bucks, attendance records, and 1 on 1 files.
 Available games: Bingo Caller, Family Feud, Music Trivia Bingo, Jeopardy Trivia, Memory Match.
+
+${buildSpringContextFromData({ state, memories, now })}
 
 Rules:
 - Use Amanda's nursing-home language.
@@ -320,6 +425,19 @@ export function planLocalSpringResponse({ message, docText = '', state, currentP
     return {
       actions,
       displayText: `I created an activity draft for ${title}. Amanda can edit it before approving it to the Activities Library.`,
+    };
+  }
+
+  if (
+    (lower.includes('calendar') || lower.includes('schedule') || lower.includes('events'))
+    && (lower.includes('what') || lower.includes('show') || lower.includes('list') || lower.includes('this week'))
+    && !lower.includes('add')
+    && !lower.includes('schedule it')
+    && !lower.includes('put')
+  ) {
+    return {
+      actions,
+      displayText: upcomingEventListForReply(state),
     };
   }
 

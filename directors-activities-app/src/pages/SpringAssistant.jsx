@@ -2,7 +2,7 @@ import { CalendarPlus, FilePlus2, Paperclip, Send, UsersRound, X } from 'lucide-
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader';
-import { sendSpringChat, uploadSpringFile } from '../services/springApi.js';
+import { loadSpringBrainMemories, sendSpringChat, uploadSpringFile } from '../services/springApi.js';
 import { useAppState } from '../state/appState';
 import { applySpringActionsToDispatch, hasSpringActions } from '../utils/applySpringActions.js';
 import { parseSpringActions } from '../utils/springActions.js';
@@ -120,12 +120,13 @@ export default function SpringAssistant() {
         messageForApi = (trimmed || 'Please review this upload and help me turn it into something useful for activities.') + '\n\n[File: ' + uploadedFile.fileName + ']\n\nContents:\n' + fence + '\n' + fileText + '\n' + fence;
       }
 
+      const brainMemories = await loadSpringBrainMemories({ limit: 30 }).catch(() => []);
       const rawResponse = await sendSpringChat({
         message: messageForApi,
         history: historyForApi,
         docText: uploadedFile?.text,
         fileName: uploadedFile?.fileName || attachedFile?.name,
-        skillPrompt: buildSpringSkillPrompt({ state, currentPath: window.location.pathname }),
+        skillPrompt: buildSpringSkillPrompt({ state, memories: brainMemories, currentPath: window.location.pathname }),
       });
       const parsed = parseSpringActions(rawResponse);
       const localPlanned = planLocalSpringResponse({

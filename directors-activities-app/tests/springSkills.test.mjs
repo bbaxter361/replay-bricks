@@ -5,16 +5,34 @@ import { parseSpringActions } from '../src/utils/springActions.js';
 
 const state = {
   residents: [
-    { id: 'resident-flo', name: 'Flo' },
-    { id: 'resident-katherine', name: 'Katherine' },
+    { id: 'resident-flo', name: 'Flo', careArea: 'memory', interests: ['bingo'], notes: 'Memory Care leader.' },
+    { id: 'resident-katherine', name: 'Katherine', careArea: 'assisted', interests: ['music'] },
   ],
   activities: [
     { id: 'activity-bingo', title: 'Bingo' },
   ],
+  bingoTransactions: [
+    { id: 'bingo-flo', residentId: 'resident-flo', amount: 22 },
+    { id: 'bingo-katherine', residentId: 'resident-katherine', amount: 21 },
+  ],
+  calendarEvents: [
+    { id: 'event-today', title: 'Bingo', start: '2026-07-27T10:00:00', end: '2026-07-27T11:00:00', wing: 'both', location: 'Activity room' },
+  ],
+  books: [
+    { id: 'book-hexed', title: 'Hexed', author: 'Kevin Hearne', status: 'currently-reading' },
+  ],
+  springMessages: [
+    { id: 'spring-user', role: 'user', content: 'Add bingo points for Flo.' },
+  ],
 };
 
 test('Spring skill prompt teaches activity draft and 1 on 1 action blocks', () => {
-  const prompt = buildSpringSkillPrompt({ state, currentPath: '/app/residents/resident-flo' });
+  const prompt = buildSpringSkillPrompt({
+    state,
+    currentPath: '/app/residents/resident-flo',
+    memories: [{ topic: 'point-leaders', principle: 'Flo leads Memory Care with 22 points.' }],
+    now: new Date('2026-07-27T09:00:00'),
+  });
 
   assert.match(prompt, /===ACTIVITY_DRAFT===/);
   assert.match(prompt, /===ONE_ON_ONE===/);
@@ -22,6 +40,12 @@ test('Spring skill prompt teaches activity draft and 1 on 1 action blocks', () =
   assert.match(prompt, /Ollama-hosted DeepSeek/);
   assert.match(prompt, /Do not say OpenRouter/);
   assert.match(prompt, /Flo/);
+  assert.match(prompt, /COMPASS LIVE DATA/);
+  assert.match(prompt, /Flo \(memory\): 22 Bingo Bucks/);
+  assert.match(prompt, /Katherine \(assisted\): 21 Bingo Bucks/);
+  assert.match(prompt, /Bingo \(both, Activity room\)/);
+  assert.match(prompt, /Hexed by Kevin Hearne/);
+  assert.match(prompt, /point-leaders/);
 });
 
 test('Spring asks Amanda for the resident when a 1 on 1 request is incomplete', () => {
@@ -87,6 +111,30 @@ Steps: Call "Red" -> Find red square -> Mark it.`;
   assert.deepEqual(planned.actions.activityDrafts[0].supplies, ['Chair', 'blanket']);
   assert.match(planned.actions.activityDrafts[1].steps[0], /Call "Red"/);
   assert.match(planned.displayText, /created 2 activity drafts/i);
+});
+
+test('Spring answers calendar lookup questions from saved events instead of asking to schedule', () => {
+  const planned = planLocalSpringResponse({
+    message: 'What events are on the calendar this week?',
+    state,
+    currentPath: '/app/spring',
+  });
+
+  assert.equal(planned.actions.questions.length, 0);
+  assert.match(planned.displayText, /calendar for the next 7 days/i);
+  assert.match(planned.displayText, /Bingo/);
+  assert.doesNotMatch(planned.displayText, /What date and time should I use/i);
+});
+
+test('Spring still asks for date and time when Amanda wants to add an event', () => {
+  const planned = planLocalSpringResponse({
+    message: 'Add this to the calendar',
+    state,
+    currentPath: '/app/spring',
+  });
+
+  assert.equal(planned.actions.questions[0].recordType, 'calendar');
+  assert.match(planned.displayText, /date and time/i);
 });
 
 test('Spring action parser understands new activity, one on one, and question blocks', () => {

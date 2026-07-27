@@ -21,6 +21,16 @@ test('Spring API can upload a file and pass extracted text into chat', async () 
   assert.match(source, /fileName/);
 });
 
+test('Spring API can load brain memories through the local proxy', async () => {
+  const source = await readFile(new URL('../src/services/springApi.js', import.meta.url), 'utf8');
+  const proxy = await readFile(new URL('../netlify/functions/spring-proxy.js', import.meta.url), 'utf8');
+
+  assert.match(source, /export async function loadSpringBrainMemories/);
+  assert.match(source, /'\/api\/brain\/memories'/);
+  assert.match(proxy, /'\/api\/brain\/memories'/);
+  assert.match(proxy, /'\/api\/spring-proxy\/brain\/memories'/);
+});
+
 test('Spring keeps extracted file context in chat history for follow-up messages', async () => {
   const source = await readFile(new URL('../src/pages/SpringAssistant.jsx', import.meta.url), 'utf8');
 

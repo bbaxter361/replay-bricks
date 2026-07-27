@@ -57,6 +57,17 @@ export async function uploadSpringFile(file) {
   return response.json();
 }
 
+export async function loadSpringBrainMemories({ limit = 30 } = {}) {
+  const response = await springApiFetch('/api/brain/memories');
+  if (!response.ok) throw new Error(`Spring brain load failed: ${response.status}`);
+  const data = await response.json();
+  const memories = Array.isArray(data.memories) ? data.memories : [];
+  return memories
+    .filter((memory) => memory?.principle || memory?.topic)
+    .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0))
+    .slice(0, limit);
+}
+
 export async function loadLegacyCompassData() {
   const results = await Promise.allSettled(
     legacyKeys.map(async (key) => {
