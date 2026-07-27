@@ -1,7 +1,7 @@
 // Spring — Netlify Function
 // The Compass AI assistant for Amanda
 // Migrated from Fly.io Express server to Netlify Function
-// Uses DeepSeek V4 Flash for production
+// Uses Ollama with a DeepSeek model for production
 
 import serverless from 'serverless-http';
 import express from 'express';
@@ -53,10 +53,13 @@ function apiKeyAuth(req, res, next) {
 }
 
 // ── AI Configuration ──
-// Spring uses DeepSeek directly — cheap and fast for Amanda's needs
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+// Spring uses Ollama running a DeepSeek model.
+const OLLAMA_API_URL =
+  process.env.OLLAMA_API_URL ||
+  (process.env.OLLAMA_BASE_URL
+    ? `${process.env.OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`
+    : 'http://127.0.0.1:11434/api/chat');
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:latest';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4.1-mini';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
@@ -74,7 +77,7 @@ export function buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, 
   if (imageBase64) {
     content = `${content}
 
-[Image upload note: Amanda uploaded an image, but the current DeepSeek API accepts text-only chat messages. Do not claim to see visual details unless extracted text is provided. Ask Amanda to describe the image or upload a text/PDF/document version if needed.]`.trim();
+[Image upload note: Amanda uploaded an image, but the current Ollama DeepSeek chat path accepts text-only chat messages. Do not claim to see visual details unless extracted text is provided. Ask Amanda to describe the image or upload a text/PDF/document version if needed.]`.trim();
   }
 
   messages.push({ role: 'user', content });
@@ -85,28 +88,30 @@ export function buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, 
 async function callAI(systemPrompt, userMessage, imageBase64, history) {
   const messages = buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, history });
 
-  const response = await fetch(DEEPSEEK_API_URL, {
+  const response = await fetch(OLLAMA_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
     },
     body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
+      model: OLLAMA_MODEL,
       messages,
-      max_tokens: 2000,
-      temperature: 0.7
+      stream: false,
+      options: {
+        num_predict: 2000,
+        temperature: 0.7
+      }
     })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('DeepSeek API error:', response.status, errorText);
-    throw new Error(`DeepSeek error: ${response.status}`);
+    console.error('Ollama DeepSeek error:', response.status, errorText);
+    throw new Error(`Ollama DeepSeek error: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that request.";
+  return data.message?.content || data.response || "I'm sorry, I couldn't process that request.";
 }
 
 function extractUrlsForChat(text) {
@@ -266,32 +271,34 @@ ${String(text || '').slice(0, 70000)}
 }
 
 async function callDeepSeekForCalendarImport({ fileName, text, targetMonth, importMode }) {
-  const response = await fetch(DEEPSEEK_API_URL, {
+  const response = await fetch(OLLAMA_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
     },
     body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
+      model: OLLAMA_MODEL,
       messages: [
         { role: 'system', content: 'You extract activity calendars into strict JSON for a senior living activities director.' },
         { role: 'user', content: buildCalendarImportPrompt({ fileName, text, targetMonth, importMode }) }
       ],
-      max_tokens: 6000,
-      temperature: 0.1,
-      response_format: { type: 'json_object' }
+      stream: false,
+      format: 'json',
+      options: {
+        num_predict: 6000,
+        temperature: 0.1
+      }
     })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('DeepSeek calendar import error:', response.status, errorText);
-    throw new Error(`DeepSeek calendar import error: ${response.status}`);
+    console.error('Ollama calendar import error:', response.status, errorText);
+    throw new Error(`Ollama calendar import error: ${response.status}`);
   }
 
   const data = await response.json();
-  return parseCalendarImportResponse(data.choices?.[0]?.message?.content || '');
+  return parseCalendarImportResponse(data.message?.content || data.response || '');
 }
 
 function getMimeType(fileName) {
@@ -452,7 +459,7 @@ You are an expert in:
 - Use specific, actionable suggestions — not vague ideas
 - Keep responses concise for a busy Activities Director
 - If Amanda shares a photo, acknowledge it and offer to help describe what she can do with the items shown
-- You are powered by DeepSeek V4 Pro AI model - if asked about your model, mention this
+- You are powered by an Ollama-hosted DeepSeek model - if asked about your model, mention this
 
 ## CALENDAR SYSTEM
 Amanda's Compass app has TWO calendars: Assisted Living and Memory Care. When suggesting or creating activities:
@@ -600,7 +607,7 @@ app.post('/api/chat', apiKeyAuth, async (req, res) => {
     const { message, image, docText, fileName, history } = req.body;
 
     // Check if we have any AI configured
-    const noAI = !DEEPSEEK_API_KEY;
+    const noAI = !OLLAMA_API_URL || !OLLAMA_MODEL;
 
     if (noAI) {
       return res.json({
@@ -694,8 +701,8 @@ app.post('/api/import-calendar', apiKeyAuth, upload.single('file'), async (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    if (!DEEPSEEK_API_KEY) {
-      return res.status(503).json({ error: 'Calendar import needs DeepSeek configured.' });
+    if (!OLLAMA_API_URL || !OLLAMA_MODEL) {
+      return res.status(503).json({ error: 'Calendar import needs Ollama DeepSeek configured.' });
     }
 
     const filePath = req.file.path;
@@ -879,7 +886,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'Spring (Netlify)',
     version: '2.0.0',
-    model: DEEPSEEK_MODEL,
+    model: OLLAMA_MODEL,
     blobs: true,
   });
 });
@@ -893,7 +900,7 @@ export { handler };
 if (process.env.NETLIFY_DEV !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌱 Spring running on port ${PORT}`);
-    console.log(`🤖 ${DEEPSEEK_MODEL}: ${DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 Ollama ${OLLAMA_MODEL}: ${OLLAMA_API_URL ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
   });
 }
