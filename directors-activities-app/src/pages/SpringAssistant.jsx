@@ -170,9 +170,7 @@ export default function SpringAssistant() {
 
   return (
     <>
-      <SectionHeader eyebrow="Spring" title="Activities Director Assistant">
-        Spring is connected to the existing live Spring backend and restored Compass data.
-      </SectionHeader>
+      <SectionHeader eyebrow="Spring" title="Your Personal Activities Assistant" />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <section className="app-card flex h-[clamp(360px,calc(100dvh-18rem),560px)] min-h-0 flex-col p-4">

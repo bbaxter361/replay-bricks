@@ -1,13 +1,15 @@
 import { ArrowLeft, LogOut, UserRound } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { navItems } from '../navigation';
 import { useAppState } from '../state/appState';
 import SpringQuickAsk from './SpringQuickAsk';
 
 export default function TopBar() {
   const { state, dispatch } = useAppState();
+  const location = useLocation();
   const navigate = useNavigate();
+  const showQuickAsk = !location.pathname.startsWith('/app/spring');
 
   const logout = () => {
     dispatch({ type: 'logout' });
@@ -22,8 +24,7 @@ export default function TopBar() {
     <header className="sticky top-0 z-20 border-b border-[#ded0f2] bg-[#f7f1ff]/90 px-4 py-3 backdrop-blur lg:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a6fc4]">Local preview</p>
-          <p className="font-black text-[#25183f]">Amanda's daily workspace</p>
+          <p className="font-black text-[#25183f]">Amanda Daily Workspace</p>
         </div>
         <div className="flex items-center gap-2">
           <button className="app-button app-button-secondary" onClick={backToPortal} type="button">
@@ -60,7 +61,7 @@ export default function TopBar() {
           );
         })}
       </nav>
-      <SpringQuickAsk />
+      {showQuickAsk && <SpringQuickAsk />}
     </header>
   );
 }

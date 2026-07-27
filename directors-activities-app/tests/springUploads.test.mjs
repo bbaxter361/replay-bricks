@@ -54,6 +54,9 @@ test('Spring quick ask is available from the app shell', async () => {
   const layout = await readFile(new URL('../src/components/TopBar.jsx', import.meta.url), 'utf8');
   const quickAsk = await readFile(new URL('../src/components/SpringQuickAsk.jsx', import.meta.url), 'utf8');
 
+  assert.match(layout, /useLocation/);
+  assert.match(layout, /!location\.pathname\.startsWith\('\/app\/spring'\)/);
+  assert.match(layout, /\{showQuickAsk && <SpringQuickAsk \/>}/);
   assert.match(layout, /SpringQuickAsk/);
   assert.match(quickAsk, /buildSpringSkillPrompt/);
   assert.match(quickAsk, /planLocalSpringResponse/);
