@@ -1,5 +1,5 @@
 import { CalendarPlus, FilePlus2, Paperclip, Send, UsersRound, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader';
 import { sendSpringChat, uploadSpringFile } from '../services/springApi.js';
@@ -33,6 +33,11 @@ export default function SpringAssistant() {
   const [fileError, setFileError] = useState('');
   const [isReadingFile, setIsReadingFile] = useState(false);
   const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [state.springMessages.length, isSending, isReadingFile]);
 
   const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
@@ -163,6 +168,7 @@ export default function SpringAssistant() {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
           {(selectedFile || fileError) && (
             <div className="mt-4 rounded-lg border border-[#ded0f2] bg-[#fbf8ff] p-3 text-sm">
