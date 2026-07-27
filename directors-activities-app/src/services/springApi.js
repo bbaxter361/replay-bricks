@@ -1,7 +1,9 @@
 import { mergeLegacyCompassData } from '../utils/legacyCompassData.js';
 
-export const SPRING_API_BASE = import.meta.env.VITE_SPRING_API_BASE || '/api/spring-proxy';
-export const SPRING_API_KEY = import.meta.env.VITE_SPRING_API_KEY || '';
+const viteEnv = import.meta.env || {};
+
+export const SPRING_API_BASE = viteEnv.VITE_SPRING_API_BASE || '/api/spring-proxy';
+export const SPRING_API_KEY = viteEnv.VITE_SPRING_API_KEY || '';
 
 const legacyKeys = ['contacts', 'events', 'chatHistory', 'conversations', 'books'];
 
@@ -22,12 +24,12 @@ export async function springApiFetch(path, options = {}) {
   });
 }
 
-export async function sendSpringChat({ message, history, docText, fileName }) {
+export async function sendSpringChat({ message, history, docText, fileName, skillPrompt }) {
   const response = await springApiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      message,
+      message: skillPrompt ? `${skillPrompt}\n\nAmanda request:\n${message}` : message,
       docText,
       fileName,
       history: (history || []).slice(-20).map((item) => ({

@@ -43,6 +43,25 @@ test('maps legacy Compass books into Amanda bookshelf entries', () => {
   assert.equal(books[0].status, 'bookshelf');
 });
 
+test('recovers orphaned legacy books that used old read-book field names', () => {
+  const books = mapLegacyBooks([
+    {
+      bookTitle: 'Still Alice',
+      writer: 'Lisa Genova',
+      pageCount: '320',
+      completedAt: '2026-06-15T12:00:00.000Z',
+      rating: '5',
+    },
+  ]);
+
+  assert.equal(books[0].id, 'legacy-book-still-alice-lisa-genova');
+  assert.equal(books[0].title, 'Still Alice');
+  assert.equal(books[0].author, 'Lisa Genova');
+  assert.equal(books[0].pages, 320);
+  assert.equal(books[0].dateCompleted, '2026-06-15');
+  assert.equal(books[0].rating, 5);
+});
+
 test('maps legacy chat history into Spring messages', () => {
   const messages = mapLegacyChatHistory([
     { id: 'chat-1', role: 'user', message: 'Plan bingo', timestamp: '2026-07-06T15:00:00.000Z' },
@@ -75,4 +94,22 @@ test('maps family contacts and only replaces local samples when remote has data'
   assert.equal(merged.contacts[0].id, 'remote-contact');
   assert.equal(merged.calendarEvents[0].id, 'local-event');
   assert.equal(merged.books[0].id, 'remote-book');
+});
+
+test('empty legacy Compass response leaves Amanda bootstrap data and does not show a zero restore', () => {
+  const state = {
+    contacts: [{ id: 'local-contact', name: 'Local' }],
+    calendarEvents: [{ id: 'local-event', title: 'Local Event' }],
+    books: [{ id: 'local-book', title: 'Local Book' }],
+    springMessages: [{ id: 'local-message', content: 'Local Spring memory' }],
+  };
+
+  const merged = mergeLegacyCompassData(state, {
+    contacts: [],
+    events: [],
+    books: [],
+    chatHistory: [],
+  });
+
+  assert.equal(merged, state);
 });

@@ -1,9 +1,12 @@
 import { CalendarPlus, FilePlus2, Paperclip, Send, UsersRound, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SectionHeader from '../components/SectionHeader';
 import { sendSpringChat, uploadSpringFile } from '../services/springApi.js';
 import { useAppState } from '../state/appState';
+import { applySpringActionsToDispatch, hasSpringActions } from '../utils/applySpringActions.js';
 import { parseSpringActions } from '../utils/springActions.js';
+import { buildSpringSkillPrompt, planLocalSpringResponse } from '../utils/springSkills.js';
 
 function makeMessage(role, content) {
   return {
@@ -16,63 +19,13 @@ function makeMessage(role, content) {
 
 export default function SpringAssistant() {
   const { state, dispatch } = useAppState();
+  const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileError, setFileError] = useState('');
   const [isReadingFile, setIsReadingFile] = useState(false);
   const fileInputRef = useRef(null);
-
-  const applySpringActions = (actions) => {
-    actions.events.forEach((event) => {
-      if (!event?.title || !event?.start) return;
-      const start = new Date(event.start);
-      const end = new Date(event.end || start.getTime() + 45 * 60 * 1000);
-      dispatch({
-        type: 'addCalendarEvent',
-        event: {
-          id: `event-spring-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          activityId: event.activityId || '',
-          title: event.title,
-          start: Number.isNaN(start.getTime()) ? event.start : start.toISOString(),
-          end: Number.isNaN(end.getTime()) ? event.end || event.start : end.toISOString(),
-          wing: event.wing || 'both',
-          location: event.location || '',
-          description: event.description || '',
-          supplies: event.supplies || [],
-        },
-      });
-    });
-
-    actions.books.forEach((book) => {
-      if (!book?.title) return;
-      dispatch({
-        type: 'addBook',
-        book: {
-          title: book.title,
-          author: book.author || '',
-          pages: book.pages || 0,
-          dateCompleted: new Date().toISOString().slice(0, 10),
-          rating: 0,
-          status: 'bookshelf',
-        },
-      });
-    });
-
-    actions.contacts.forEach((contact) => {
-      if (!contact?.name) return;
-      dispatch({
-        type: 'addFamilyContact',
-        contact: {
-          residentId: contact.residentId || '',
-          name: contact.name,
-          relationship: contact.relationship || 'family',
-          phone: contact.phone || '',
-          email: contact.email || '',
-        },
-      });
-    });
-  };
 
   const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
@@ -103,9 +56,9 @@ export default function SpringAssistant() {
     dispatch({ type: 'appendSpringMessage', message: userMessage });
     setMessage('');
     setIsSending(true);
+    let uploadedFile = null;
 
     try {
-      let uploadedFile = null;
       if (attachedFile) {
         setIsReadingFile(true);
         uploadedFile = await uploadSpringFile(attachedFile);
@@ -118,18 +71,42 @@ export default function SpringAssistant() {
         history: [...state.springMessages, userMessage],
         docText: uploadedFile?.text,
         fileName: uploadedFile?.fileName || attachedFile?.name,
+        skillPrompt: buildSpringSkillPrompt({ state, currentPath: window.location.pathname }),
       });
       const parsed = parseSpringActions(rawResponse);
-      applySpringActions(parsed);
+      const localPlanned = planLocalSpringResponse({
+        message: trimmed,
+        docText: uploadedFile?.text || '',
+        state,
+        currentPath: window.location.pathname,
+      });
+      const actionSource = hasSpringActions(parsed)
+        ? parsed
+        : { ...localPlanned.actions, displayText: localPlanned.displayText };
+      applySpringActionsToDispatch(actionSource, dispatch, { onLaunchGame: () => navigate('/app/games') });
       dispatch({
         type: 'appendSpringMessage',
-        message: makeMessage('assistant', parsed.displayText || 'Done. I handled that for you.'),
+        message: makeMessage('assistant', actionSource.displayText || parsed.displayText || localPlanned.displayText || 'Done. I handled that for you.'),
       });
     } catch {
-      dispatch({
-        type: 'appendSpringMessage',
-        message: makeMessage('assistant', "I'm having trouble reading that file or connecting to Spring right now. Please try the upload again or use a different file format."),
+      const localPlanned = planLocalSpringResponse({
+        message: trimmed,
+        docText: uploadedFile?.text || '',
+        state,
+        currentPath: window.location.pathname,
       });
+      if (hasSpringActions(localPlanned.actions)) {
+        applySpringActionsToDispatch(localPlanned.actions, dispatch, { onLaunchGame: () => navigate('/app/games') });
+        dispatch({
+          type: 'appendSpringMessage',
+          message: makeMessage('assistant', `${localPlanned.displayText} I used the local save path because the live Spring connection had trouble.`),
+        });
+      } else {
+        dispatch({
+          type: 'appendSpringMessage',
+          message: makeMessage('assistant', "I'm having trouble reading that file or connecting to Spring right now. Please try the upload again or use a different file format."),
+        });
+      }
     } finally {
       setIsReadingFile(false);
       setIsSending(false);

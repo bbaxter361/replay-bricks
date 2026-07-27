@@ -5,6 +5,18 @@ function isoDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function slug(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function legacyBookId(book, title, author) {
+  if (book.id) return book.id;
+  return `legacy-book-${slug(title)}${author ? `-${slug(author)}` : ''}`;
+}
+
 export function mapLegacyEvents(events = []) {
   return events
     .filter((event) => event && event.id && event.title && event.start && event.end)
@@ -43,19 +55,25 @@ export function mapLegacyContacts(contacts = []) {
 
 export function mapLegacyBooks(books = []) {
   return books
-    .filter((book) => book && book.id && book.title)
-    .map((book) => ({
-      id: book.id,
-      title: book.title,
-      author: book.author || '',
-      pages: Number(book.pages || 0),
-      dateStarted: book.dateStarted || '',
-      dateCompleted: book.dateCompleted || isoDateOnly(book.dateRead),
-      rating: Number(book.rating || 0),
-      status: book.status || 'bookshelf',
-      addedBy: book.addedBy || '',
-      createdAt: book.createdAt || book.dateRead || '',
-    }));
+    .map((book) => {
+      const title = book?.title || book?.bookTitle || book?.name || '';
+      const author = book?.author || book?.writer || '';
+      if (!book || !title) return null;
+
+      return {
+        id: legacyBookId(book, title, author),
+        title,
+        author,
+        pages: Number(book.pages || book.pageCount || 0),
+        dateStarted: book.dateStarted || book.startedAt || '',
+        dateCompleted: book.dateCompleted || isoDateOnly(book.dateRead || book.completedAt || book.finishedAt),
+        rating: Number(book.rating || 0),
+        status: book.status || 'bookshelf',
+        addedBy: book.addedBy || '',
+        createdAt: book.createdAt || book.dateRead || book.completedAt || '',
+      };
+    })
+    .filter(Boolean);
 }
 
 export function mapLegacyChatHistory(chatHistory = []) {
@@ -75,6 +93,9 @@ export function mergeLegacyCompassData(state, legacyData) {
   const calendarEvents = mapLegacyEvents(legacyData.events);
   const books = mapLegacyBooks(legacyData.books);
   const springMessages = mapLegacyChatHistory(legacyData.chatHistory);
+  const restoredCount = contacts.length + calendarEvents.length + books.length + springMessages.length;
+
+  if (restoredCount === 0) return state;
 
   return {
     ...state,

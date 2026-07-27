@@ -8,11 +8,14 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4176",
     "test": "node --test tests/*.test.mjs",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync:watchdog-obsidian": "node scripts/sync-watchdog-obsidian.mjs"
   },
   "dependencies": {
+    "@netlify/blobs": "^9.1.6",
     "@tailwindcss/vite": "^4.2.4",
     "lucide-react": "1.14.0",
+    "nodemailer": "^7.0.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",

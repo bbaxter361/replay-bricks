@@ -29,3 +29,13 @@ test('Spring proxy allows multipart file upload to the live read-file endpoint',
   assert.match(source, /content-type/i);
   assert.match(source, /'\/api\/spring-proxy\/read-file'/);
 });
+
+test('Spring quick ask is available from the app shell', async () => {
+  const layout = await readFile(new URL('../src/components/TopBar.jsx', import.meta.url), 'utf8');
+  const quickAsk = await readFile(new URL('../src/components/SpringQuickAsk.jsx', import.meta.url), 'utf8');
+
+  assert.match(layout, /SpringQuickAsk/);
+  assert.match(quickAsk, /buildSpringSkillPrompt/);
+  assert.match(quickAsk, /planLocalSpringResponse/);
+  assert.match(quickAsk, /applySpringActionsToDispatch/);
+});

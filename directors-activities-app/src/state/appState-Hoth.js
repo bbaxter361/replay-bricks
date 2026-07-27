@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useReducer } from 'react';
 import {
   activities,
   activityDrafts,
@@ -7,30 +7,24 @@ import {
   calendarEvents,
   canvaTemplates,
   contacts,
-  oneOnOneNotes,
   portalApps,
   residentActivityAttendance,
   residents,
   users,
 } from '../data/sampleData.js';
-import { fetchRemoteState, loadLocalState, mergeRemoteState, saveLocalState, saveRemoteState } from '../services/dataClient.js';
+import { loadLocalState, saveLocalState } from '../services/dataClient.js';
 import { loadLegacyCompassData } from '../services/springApi.js';
 import { approveActivityDraft as approveDraft } from '../utils/activityDrafts.js';
-import { deleteActivityRecord, updateActivityRecord } from '../utils/activityRecords.js';
 import { addBingoTransaction as addPointsTransaction, getBingoBalance } from '../utils/bingoPoints.js';
-import { addBook, deleteBook, updateBook, updateBookStatus } from '../utils/bookShelf.js';
-import { deleteCalendarEvent, deleteCalendarEventsForActivity, updateCalendarEvent } from '../utils/calendarEvents.js';
+import { addBook, deleteBook } from '../utils/bookShelf.js';
 import { createCalendarEventFromActivity, createMonthProposal } from '../utils/calendarPlanning.js';
 import { addFamilyContact, deleteFamilyContact } from '../utils/familyContacts.js';
 import { mergeLegacyCompassData } from '../utils/legacyCompassData.js';
 import { addResidentActivityAttendance } from '../utils/residentAttendance.js';
-import { addOneOnOneNote, updateResidentProfile } from '../utils/residentRecords.js';
-import { buildAuditEntry } from '../utils/springAdmin.js';
 
 const AppStateContext = createContext(null);
 
 export const initialState = {
-  dataVersion: 'amanda-brain-2026-07-07',
   users,
   currentUser: null,
   portalApps,
@@ -39,7 +33,6 @@ export const initialState = {
   activityDrafts,
   residents,
   residentActivityAttendance,
-  oneOnOneNotes,
   bingoTransactions,
   calendarEvents,
   contacts,
@@ -52,8 +45,7 @@ export const initialState = {
       createdAt: '2026-07-06T09:00:00',
     },
   ],
-  auditLog: [],
-  calendarView: 'month',
+  calendarView: 'day',
   wingFilter: 'combined',
   selectedResidentId: residents[0]?.id || null,
   selectedActivityId: activities[0]?.id || null,
@@ -61,7 +53,6 @@ export const initialState = {
   canvaExportPreview: null,
   monthProposal: null,
   legacyRestore: null,
-  activeGameId: 'bingo-caller',
 };
 
 function makeId(prefix) {
@@ -82,20 +73,6 @@ function springReplyFor(message) {
   return 'I am in local preview mode right now. The next phase will connect me to Amanda’s real saved data, Supabase, Canva, and the Obsidian archive.';
 }
 
-function appendAudit(state, audit) {
-  if (!audit) return state.auditLog || [];
-  return [
-    buildAuditEntry({
-      requestedBy: audit.requestedBy || state.currentUser?.name || 'Amanda',
-      recordType: audit.recordType,
-      recordId: audit.recordId,
-      action: audit.action,
-      changes: audit.changes,
-    }),
-    ...(state.auditLog || []),
-  ];
-}
-
 export function appReducer(state, action) {
   switch (action.type) {
     case 'setUser':
@@ -112,37 +89,8 @@ export function appReducer(state, action) {
       return { ...state, wingFilter: action.filter };
     case 'selectResident':
       return { ...state, selectedResidentId: action.residentId };
-    case 'updateResidentProfile':
-      return {
-        ...state,
-        residents: updateResidentProfile(state.residents, action.residentId, {
-          ...action.updates,
-          updatedBy: state.currentUser?.name || 'Amanda',
-        }),
-      };
     case 'selectActivity':
       return { ...state, selectedActivityId: action.activityId };
-    case 'updateActivityRecord': {
-      const key = action.recordType === 'activityDraft' ? 'activityDrafts' : 'activities';
-      return {
-        ...state,
-        [key]: updateActivityRecord(state[key], action.recordId, action.updates),
-        auditLog: appendAudit(state, action.audit),
-      };
-    }
-    case 'deleteActivityRecord': {
-      const key = action.recordType === 'activityDraft' ? 'activityDrafts' : 'activities';
-      const deleted = deleteActivityRecord(state[key], action.recordId);
-      return {
-        ...state,
-        [key]: deleted.records,
-        calendarEvents: action.recordType === 'activityDraft'
-          ? state.calendarEvents
-          : deleteCalendarEventsForActivity(state.calendarEvents, action.recordId),
-        selectedActivityId: deleted.nextSelectedId,
-        auditLog: appendAudit(state, action.audit),
-      };
-    }
     case 'approveActivityDraft': {
       const draft = state.activityDrafts.find((item) => item.id === action.draftId);
       if (!draft) return state;
@@ -160,20 +108,19 @@ export function appReducer(state, action) {
         status: 'draft',
         title: action.title || 'New Activity Draft',
         category: action.category || 'custom',
-        bestFor: action.bestFor || 'both',
-        difficulty: action.difficulty || 'easy',
-        durationMinutes: action.durationMinutes || 45,
-        groupSize: action.groupSize || 'small group',
-        supplies: action.supplies || [],
-        steps: action.steps || ['Review source material.', 'Add clear instructions.', 'Approve when ready.'],
-        safetyNotes: action.safetyNotes || '',
-        dementiaAdaptations: action.dementiaAdaptations || '',
-        tags: action.tags || ['draft'],
-        residentNotes: action.residentNotes || '',
+        bestFor: 'both',
+        difficulty: 'easy',
+        durationMinutes: 45,
+        groupSize: 'small group',
+        supplies: [],
+        steps: ['Review source material.', 'Add clear instructions.', 'Approve when ready.'],
+        safetyNotes: '',
+        dementiaAdaptations: '',
+        tags: ['draft'],
         source: action.source || { type: 'manual', label: 'Manual entry' },
         createdAt: new Date().toISOString(),
       };
-      return { ...state, activityDrafts: [draft, ...state.activityDrafts], auditLog: appendAudit(state, action.audit) };
+      return { ...state, activityDrafts: [draft, ...state.activityDrafts] };
     }
     case 'addBingoTransaction':
       return {
@@ -194,21 +141,9 @@ export function appReducer(state, action) {
     case 'deleteFamilyContact':
       return { ...state, contacts: deleteFamilyContact(state.contacts, action.contactId) };
     case 'addBook':
-      return { ...state, books: addBook(state.books, action.book), auditLog: appendAudit(state, action.audit) };
+      return { ...state, books: addBook(state.books, action.book) };
     case 'deleteBook':
       return { ...state, books: deleteBook(state.books, action.bookId) };
-    case 'updateBook':
-      return {
-        ...state,
-        books: updateBook(state.books, action.bookId, action.updates),
-        auditLog: appendAudit(state, action.audit),
-      };
-    case 'updateBookStatus':
-      return {
-        ...state,
-        books: updateBookStatus(state.books, action.bookId, action.status),
-        auditLog: appendAudit(state, action.audit),
-      };
     case 'addResidentActivityAttendance':
       return {
         ...state,
@@ -216,15 +151,6 @@ export function appReducer(state, action) {
           ...action.attendance,
           createdBy: state.currentUser?.name || 'Amanda',
         }),
-      };
-    case 'addOneOnOneNote':
-      return {
-        ...state,
-        oneOnOneNotes: addOneOnOneNote(state.oneOnOneNotes || [], {
-          ...action.note,
-          createdBy: state.currentUser?.name || 'Amanda',
-        }),
-        auditLog: appendAudit(state, action.audit),
       };
     case 'scheduleActivity': {
       const activity = state.activities.find((item) => item.id === action.activityId);
@@ -234,20 +160,8 @@ export function appReducer(state, action) {
         start: action.start || '2026-07-08T10:00:00',
         wing: action.wing || activity.bestFor,
       });
-      return { ...state, calendarEvents: [event, ...state.calendarEvents], auditLog: appendAudit(state, action.audit) };
+      return { ...state, calendarEvents: [event, ...state.calendarEvents] };
     }
-    case 'updateCalendarEvent':
-      return {
-        ...state,
-        calendarEvents: updateCalendarEvent(state.calendarEvents, action.eventId, action.updates),
-        auditLog: appendAudit(state, action.audit),
-      };
-    case 'deleteCalendarEvent':
-      return {
-        ...state,
-        calendarEvents: deleteCalendarEvent(state.calendarEvents, action.eventId),
-        auditLog: appendAudit(state, action.audit),
-      };
     case 'createMonthProposal':
       return {
         ...state,
@@ -285,61 +199,10 @@ export function appReducer(state, action) {
     }
     case 'appendSpringMessage':
       return { ...state, springMessages: [...state.springMessages, action.message] };
-    case 'launchGame':
-      return { ...state, activeGameId: action.gameId || state.activeGameId };
-    case 'springUpdateRecord': {
-      const audit = {
-        requestedBy: action.requestedBy || state.currentUser?.name || 'Amanda',
-        recordType: action.recordType,
-        recordId: action.recordId,
-        action: 'update',
-        changes: action.updates,
-      };
-      if (action.recordType === 'resident') {
-        return {
-          ...state,
-          residents: updateResidentProfile(state.residents, action.recordId, {
-            ...action.updates,
-            updatedBy: action.requestedBy || state.currentUser?.name || 'Amanda',
-          }),
-          auditLog: appendAudit(state, audit),
-        };
-      }
-      if (action.recordType === 'calendar') {
-        return {
-          ...state,
-          calendarEvents: updateCalendarEvent(state.calendarEvents, action.recordId, action.updates),
-          auditLog: appendAudit(state, audit),
-        };
-      }
-      if (action.recordType === 'activity' || action.recordType === 'activityDraft') {
-        const key = action.recordType === 'activityDraft' ? 'activityDrafts' : 'activities';
-        return {
-          ...state,
-          [key]: updateActivityRecord(state[key], action.recordId, action.updates),
-          auditLog: appendAudit(state, audit),
-        };
-      }
-      return { ...state, auditLog: appendAudit(state, audit) };
-    }
     case 'restoreLegacyCompassData':
       return mergeLegacyCompassData(state, action.legacyData || {});
-    case 'mergeRemoteDirectorData':
-      return mergeRemoteState(state, action.remoteState || {});
-    case 'legacyRestoreFailed':
-      return {
-        ...state,
-        legacyRestore: {
-          restoredAt: new Date().toISOString(),
-          error: action.error || 'Restore failed',
-          contacts: 0,
-          calendarEvents: 0,
-          books: 0,
-          springMessages: 0,
-        },
-      };
     case 'addCalendarEvent':
-      return { ...state, calendarEvents: [action.event, ...state.calendarEvents], auditLog: appendAudit(state, action.audit) };
+      return { ...state, calendarEvents: [action.event, ...state.calendarEvents] };
     default:
       return state;
   }
@@ -347,38 +210,10 @@ export function appReducer(state, action) {
 
 export function AppStateProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState, (fallback) => loadLocalState(fallback));
-  const remoteReadyRef = useRef(false);
-  const saveTimerRef = useRef(null);
 
   useEffect(() => {
     saveLocalState(state);
-    if (!remoteReadyRef.current) return undefined;
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveRemoteState(state).catch(() => {});
-    }, 800);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
   }, [state]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchRemoteState()
-      .then((remoteState) => {
-        if (!cancelled && remoteState) dispatch({ type: 'mergeRemoteDirectorData', remoteState });
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) remoteReadyRef.current = true;
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,9 +221,7 @@ export function AppStateProvider({ children }) {
       .then((legacyData) => {
         if (!cancelled) dispatch({ type: 'restoreLegacyCompassData', legacyData });
       })
-      .catch((error) => {
-        if (!cancelled) dispatch({ type: 'legacyRestoreFailed', error: error.message });
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;

@@ -19,6 +19,10 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Portal />} />
       <Route
+        path="/app/games/:gameId/tv"
+        element={state.currentUser ? <Games tvOnly /> : <Navigate to="/" replace />}
+      />
+      <Route
         path="/app"
         element={state.currentUser ? <AppLayout /> : <Navigate to="/" replace />}
       >
@@ -28,10 +32,12 @@ function AppRoutes() {
         <Route path="canva" element={<CanvaExports />} />
         <Route path="activities" element={<Activities />} />
         <Route path="residents" element={<Residents />} />
+        <Route path="residents/:residentId" element={<Residents />} />
         <Route path="family" element={<FamilyOfResidents />} />
         <Route path="contacts" element={<Navigate to="/app/family" replace />} />
         <Route path="books" element={<Books />} />
         <Route path="games" element={<Games />} />
+        <Route path="games/:gameId" element={<Games />} />
         <Route path="settings" element={<Navigate to="/app" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { navItems } from '../navigation';
 import { useAppState } from '../state/appState';
+import SpringQuickAsk from './SpringQuickAsk';
 
 export default function TopBar() {
   const { state, dispatch } = useAppState();
@@ -59,6 +60,7 @@ export default function TopBar() {
           );
         })}
       </nav>
+      <SpringQuickAsk />
     </header>
   );
 }

@@ -37,10 +37,10 @@ export default function Dashboard() {
       )}
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
-        <MetricCard icon={CalendarDays} label="Today events" value={state.calendarEvents.length} detail="Ready for Canva export" />
-        <MetricCard icon={FileCheck2} label="Draft activities" value={state.activityDrafts.length} detail="Review before saving" />
-        <MetricCard icon={UsersRound} label="Residents" value={state.residents.length} detail="Profiles and preferences" />
-        <MetricCard icon={Trophy} label="Bingo Bucks" value={totalBingoBucks} detail="Never reset automatically" />
+        <MetricCard icon={CalendarDays} label="Today events" value={state.calendarEvents.length} detail="Ready for Canva export" to="/app/calendar" />
+        <MetricCard icon={FileCheck2} label="Draft activities" value={state.activityDrafts.length} detail="Review before saving" to="/app/activities?view=drafts" />
+        <MetricCard icon={UsersRound} label="Residents" value={state.residents.length} detail="Profiles and preferences" to="/app/residents" />
+        <MetricCard icon={Trophy} label="Bingo Bucks" value={totalBingoBucks} detail="Never reset automatically" to="/app/residents" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
