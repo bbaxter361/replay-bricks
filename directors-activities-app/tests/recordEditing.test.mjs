@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { updateActivityRecord } from '../src/utils/activityRecords.js';
-import { updateCalendarEvent } from '../src/utils/calendarEvents.js';
+import { calendarEventToForm, updateCalendarEvent } from '../src/utils/calendarEvents.js';
 import { readFileSync } from 'node:fs';
 
 test('updates every editable activity field without changing the selected record id', () => {
@@ -58,6 +58,13 @@ test('updates calendar event date and time fields into saved timestamps', () => 
   assert.equal(updated[0].start, '2026-07-09T10:30:00');
   assert.equal(updated[0].end, '2026-07-09T11:15:00');
   assert.deepEqual(updated[0].supplies, ['cards', 'speaker']);
+});
+
+test('calendar editor can open with no selected event without crashing', () => {
+  const form = calendarEventToForm(null);
+
+  assert.equal(form.title, '');
+  assert.equal(form.wing, 'both');
 });
 
 test('Calendar activities open a click-to-edit calendar editor', () => {

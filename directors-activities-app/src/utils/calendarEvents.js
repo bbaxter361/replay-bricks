@@ -21,17 +21,18 @@ function combineDateTime(date, time) {
 }
 
 export function calendarEventToForm(event = {}) {
+  const calendarEvent = event || {};
   return {
-    title: event.title || '',
-    date: datePart(event.start),
-    startTime: timePart(event.start),
-    endTime: timePart(event.end),
-    description: event.description || '',
-    location: event.location || '',
-    category: event.category || event.type || '',
-    assignedStaff: event.assignedStaff || '',
-    wing: event.wing || 'both',
-    supplies: (event.supplies || []).join(', '),
+    title: calendarEvent.title || '',
+    date: datePart(calendarEvent.start),
+    startTime: timePart(calendarEvent.start),
+    endTime: timePart(calendarEvent.end),
+    description: calendarEvent.description || '',
+    location: calendarEvent.location || '',
+    category: calendarEvent.category || calendarEvent.type || '',
+    assignedStaff: calendarEvent.assignedStaff || '',
+    wing: calendarEvent.wing || 'both',
+    supplies: (calendarEvent.supplies || []).join(', '),
   };
 }
 
