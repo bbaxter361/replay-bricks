@@ -7,6 +7,13 @@ import { useAppState } from '../state/appState';
 import { applySpringActionsToDispatch, hasSpringActions } from '../utils/applySpringActions.js';
 import { parseSpringActions } from '../utils/springActions.js';
 import { buildSpringSkillPrompt, planLocalSpringResponse } from '../utils/springSkills.js';
+import {
+  buildUploadedDocText,
+  extractImageText,
+  extractScannedPdfText,
+  isImageFile,
+  isPdfFile,
+} from '../utils/uploadReader.js';
 
 function makeMessage(role, content) {
   return {
@@ -61,7 +68,34 @@ export default function SpringAssistant() {
     try {
       if (attachedFile) {
         setIsReadingFile(true);
-        uploadedFile = await uploadSpringFile(attachedFile);
+        if (isImageFile(attachedFile)) {
+          const ocrText = await extractImageText(attachedFile);
+          uploadedFile = {
+            fileName: attachedFile.name,
+            text: buildUploadedDocText({
+              fileName: attachedFile.name,
+              extractedText: ocrText,
+              source: 'ocr',
+              warning: ocrText.trim() ? '' : 'Image OCR did not find readable text.',
+            }),
+          };
+        } else {
+          uploadedFile = await uploadSpringFile(attachedFile);
+          if (isPdfFile(attachedFile) && String(uploadedFile?.text || '').trim().length < 80) {
+            const ocrText = await extractScannedPdfText(attachedFile);
+            if (ocrText.trim()) {
+              uploadedFile = {
+                fileName: uploadedFile?.fileName || attachedFile.name,
+                text: buildUploadedDocText({
+                  fileName: attachedFile.name,
+                  extractedText: ocrText,
+                  source: 'ocr',
+                  warning: 'The PDF looked scanned or image-based, so Spring used page OCR instead of normal PDF text.',
+                }),
+              };
+            }
+          }
+        }
         setIsReadingFile(false);
         removeFile();
       }
@@ -104,7 +138,7 @@ export default function SpringAssistant() {
       } else {
         dispatch({
           type: 'appendSpringMessage',
-          message: makeMessage('assistant', "I'm having trouble reading that file or connecting to Spring right now. Please try the upload again or use a different file format."),
+          message: makeMessage('assistant', "I'm having trouble reading that file or connecting to Spring right now. Please try a clearer image, a text-based PDF, or a Word/Excel/CSV version."),
         });
       }
     } finally {
