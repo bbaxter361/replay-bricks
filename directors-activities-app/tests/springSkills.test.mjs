@@ -19,6 +19,8 @@ test('Spring skill prompt teaches activity draft and 1 on 1 action blocks', () =
   assert.match(prompt, /===ACTIVITY_DRAFT===/);
   assert.match(prompt, /===ONE_ON_ONE===/);
   assert.match(prompt, /ask Amanda one clear follow-up question/i);
+  assert.match(prompt, /Ollama-hosted DeepSeek/);
+  assert.match(prompt, /Do not say OpenRouter/);
   assert.match(prompt, /Flo/);
 });
 
