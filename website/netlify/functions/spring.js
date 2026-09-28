@@ -10,7 +10,7 @@ import serverless from 'serverless-http';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import { getAllMemories, searchMemories, saveMemory, formatMemoriesForPrompt, buildExtractionPrompt } from './spring-brain.js';
+import { getAllMemories, searchMemories, saveMemory, saveAllMemories, formatMemoriesForPrompt, buildExtractionPrompt, deduplicateMemories, exportToMarkdown, similarityScore } from './spring-brain.js';
 import path from 'path';
 import fs from 'fs';
 import { getStore } from '@netlify/blobs';
@@ -19,7 +19,43 @@ import crypto from 'crypto';
 // CJS compatibility: Netlify bundles functions to CJS where import.meta.url is empty
 import { createRequire } from 'module';
 const require_ = createRequire(typeof __filename !== 'undefined' ? __filename : import.meta.url);
-const pdfParse = require_('pdf-parse');
+let _pdfjs = null;
+async function getPdfJs() {
+  if (!_pdfjs) _pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  return _pdfjs;
+}
+async function extractPdfText(pdfBuffer) {
+  const { getDocument } = await getPdfJs();
+  const data = new Uint8Array(pdfBuffer);
+  const doc = await getDocument({ data }).promise;
+  let allText = '';
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items.map(i => ({ str: i.str, x: Math.round(i.transform[4]), y: Math.round(i.transform[5]) }));
+    // Sort: top-to-bottom (y desc), left-to-right (x asc)
+    items.sort((a, b) => {
+      if (Math.abs(a.y - b.y) > 2) return b.y - a.y;
+      return a.x - b.x;
+    });
+    let text = '', lastY = null, lastX = null;
+    for (const item of items) {
+      if (!item.str.trim() && !item.str.includes('\n')) { text += item.str; continue; }
+      if (lastY !== null && Math.abs(item.y - lastY) > 2) {
+        // New row
+        text += '\n';
+      } else if (lastX !== null && Math.abs(item.x - lastX) > 30) {
+        // Same row, different column — add tab separator
+        text += '\t';
+      }
+      text += item.str;
+      lastY = item.y;
+      lastX = item.x;
+    }
+    allText += text + '\n\n';
+  }
+  return allText.trim();
+}
 const mammoth = require_('mammoth');
 const XLSX = require_('xlsx');
 
@@ -29,7 +65,7 @@ const urlRegex = /https?:\/\/[^\s<>)"']+/gi;
 const SPRING_TIME_ZONE = process.env.SPRING_TIME_ZONE || 'America/Chicago';
 
 app.use(cors({
-  origin: ['https://replaybrick.com', 'https://compass-replaybricks-v2-550.netlify.app'],
+  origin: ['https://replaybrick.com', 'https://compass-replaybricks.netlify.app', 'https://compass-replaybricks-v2.netlify.app', 'https://compass-replaybricks-v2-550.netlify.app', 'https://baxter-directors-activities.netlify.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
   credentials: false,
@@ -103,10 +139,10 @@ function apiKeyAuth(req, res, next) {
 }
 
 // ── AI Configuration ──
-// Spring routes through OpenRouter — unified billing with Hermes
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || '';
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const SPRING_MODEL = 'deepseek/deepseek-v4-flash';
+// Spring routes through Ollama Cloud — $100/mo flat rate, same deepseek-v4-flash model
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || '';
+const AI_API_URL = 'https://ollama.com/v1/chat/completions';
+const SPRING_MODEL = 'deepseek-v4-flash';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4.1-mini';
 const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID || 'OC-AZ3qrDOJC9li';
@@ -135,13 +171,11 @@ export function buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, 
 async function callAI(systemPrompt, userMessage, imageBase64, history) {
   const messages = buildDeepSeekMessages({ systemPrompt, userMessage, imageBase64, history });
 
-  const response = await fetch(OPENROUTER_API_URL, {
+  const response = await fetch(AI_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://replaybrick.com',
-      'X-Title': 'Spring (Compass)'
+      'Authorization': `Bearer ${OLLAMA_API_KEY}`
     },
     body: JSON.stringify({
       model: SPRING_MODEL,
@@ -153,8 +187,8 @@ async function callAI(systemPrompt, userMessage, imageBase64, history) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('OpenRouter API error:', response.status, errorText);
-    throw new Error(`OpenRouter error: ${response.status}`);
+    console.error('Ollama API error:', response.status, errorText);
+    throw new Error(`Ollama error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -207,8 +241,7 @@ async function fetchUrlContext(message) {
       let title = '';
 
       if (contentType.includes('application/pdf') || url.toLowerCase().includes('.pdf')) {
-        const data = await pdfParse(buffer);
-        text = data.text || '';
+        text = await extractPdfText(buffer);
         title = 'Linked PDF';
       } else {
         const html = buffer.toString('utf8');
@@ -318,13 +351,11 @@ ${String(text || '').slice(0, 70000)}
 }
 
 async function callDeepSeekForCalendarImport({ fileName, text, targetMonth, importMode }) {
-  const response = await fetch(OPENROUTER_API_URL, {
+  const response = await fetch(AI_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://replaybrick.com',
-      'X-Title': 'Spring (Calendar Import)'
+      'Authorization': `Bearer ${OLLAMA_API_KEY}`
     },
     body: JSON.stringify({
       model: SPRING_MODEL,
@@ -340,8 +371,8 @@ async function callDeepSeekForCalendarImport({ fileName, text, targetMonth, impo
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('OpenRouter calendar import error:', response.status, errorText);
-    throw new Error(`OpenRouter calendar import error: ${response.status}`);
+    console.error('Ollama calendar import error:', response.status, errorText);
+    throw new Error(`Ollama calendar import error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -409,8 +440,7 @@ async function extractTextFromUpload(filePath, originalName) {
   switch (ext) {
     case '.pdf': {
       const buf = fs.readFileSync(filePath);
-      const data = await pdfParse(buf);
-      text = data.text || '';
+      text = await extractPdfText(buf);
       break;
     }
     case '.docx': {
@@ -507,7 +537,7 @@ You are an expert in:
 - Keep responses concise for a busy Activities Director
 - If Amanda shares a photo, acknowledge it and offer to help describe what she can do with the items shown
 - You are powered by DeepSeek V4 Flash through OpenRouter — if asked about your model, mention this
-- You have a brain memory system! The \"WHAT I REMEMBER ABOUT YOU\" section contains durable facts, preferences, and decisions extracted from our past conversations. These are permanent memories — reference them naturally. If Amanda mentions something you learned before, show that you remember.
+- You have a brain memory system! The "WHAT I REMEMBER ABOUT YOU" section contains durable facts, preferences, and decisions extracted from our past conversations. These are PERMANENT memories — always reference them naturally. If Amanda mentions something you learned before, show that you remember. NEVER forget what Amanda tells you — if she shared a preference, a resident's need, a schedule change, or any important fact, it should be in your brain and you should USE it. If Amanda says "I told you that" or "don't you remember", check your memories first before responding. Forgetting things Amanda told you is your worst failure mode.
 - When Amanda shares web links, you'll read the page content and use it to help her. If she asks you to search for something online, tell her to share a link and you'll look at it together.
 
 ## CALENDAR SYSTEM
@@ -932,7 +962,7 @@ app.post('/api/chat', apiKeyAuth, rateLimiter({ windowMs: 60000, maxRequests: 30
     const { message, image, docText, fileName, history } = req.body;
 
     // Check if we have any AI configured
-    const noAI = !OPENROUTER_API_KEY;
+    const noAI = !OLLAMA_API_KEY;
 
     if (noAI) {
       return res.json({
@@ -1050,8 +1080,8 @@ app.post('/api/import-calendar', apiKeyAuth, upload.single('file'), async (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    if (!OPENROUTER_API_KEY) {
-      return res.status(503).json({ error: 'Calendar import needs OpenRouter configured.' });
+    if (!OLLAMA_API_KEY) {
+      return res.status(503).json({ error: 'Calendar import needs Ollama configured.' });
     }
 
     const filePath = req.file.path;
@@ -1609,10 +1639,21 @@ app.post('/api/brain/extract', apiKeyAuth, async (req, res) => {
     // Parse the JSON lines from the response
     const lines = rawResponse.split('\n').filter(l => l.trim().startsWith('{'));
     let saved = 0;
+    let skipped = 0;
+    const existingMemories = await getAllMemories(store);
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line.trim());
         if (parsed.topic && parsed.principle) {
+          // Pre-check: skip if a memory with the same topic has similarity > 0.55
+          const alreadyExists = existingMemories.some(m =>
+            m.topic === parsed.topic &&
+            similarityScore(m.principle, parsed.principle) > 0.55
+          );
+          if (alreadyExists) {
+            skipped++;
+            continue;
+          }
           const result = await saveMemory(store, {
             topic: parsed.topic,
             principle: parsed.principle,
@@ -1628,7 +1669,7 @@ app.post('/api/brain/extract', apiKeyAuth, async (req, res) => {
       }
     }
 
-    res.json({ extracted: saved, message: `Extracted ${saved} memories from ${recent.length} conversation turns.` });
+    res.json({ extracted: saved, skipped, message: `Extracted ${saved} memories (${skipped} duplicates skipped) from ${recent.length} conversation turns.` });
   } catch (err) {
     console.error('Brain extraction error:', err);
     res.status(500).json({ error: 'Extraction failed', details: err.message });
@@ -1643,6 +1684,83 @@ app.get('/api/brain/memories', apiKeyAuth, async (req, res) => {
     res.json({ count: memories.length, memories: memories.slice(-50) });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Brain Cleanup (deduplicate memories) ──
+app.post('/api/brain/cleanup', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+    const before = await getAllMemories(store);
+    const beforeCount = before.length;
+    const deduped = deduplicateMemories(before);
+    await saveAllMemories(store, deduped);
+    res.json({
+      before: beforeCount,
+      after: deduped.length,
+      removed: beforeCount - deduped.length,
+      message: `Cleaned up ${beforeCount - deduped.length} duplicate memories (${beforeCount} → ${deduped.length}).`
+    });
+  } catch (err) {
+    console.error('Brain cleanup error:', err);
+    res.status(500).json({ error: 'Cleanup failed', details: err.message });
+  }
+});
+
+// ── Brain Export (Obsidian markdown) ──
+app.get('/api/brain/export', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+    const memories = await getAllMemories(store);
+    const markdown = exportToMarkdown(memories);
+    res.json({ markdown, count: memories.length });
+  } catch (err) {
+    console.error('Brain export error:', err);
+    res.status(500).json({ error: 'Export failed', details: err.message });
+  }
+});
+
+// ── Nightly Report ──
+app.get('/api/nightly-report', apiKeyAuth, async (req, res) => {
+  try {
+    const store = await getBlobStore();
+
+    // Get all brain memories for context
+    const memories = await getAllMemories(store);
+
+    // Get conversation history (last 50 turns)
+    let history;
+    if (store instanceof Map) {
+      const raw = store.get(MEMORY_KEY);
+      history = raw ? JSON.parse(raw) : [];
+    } else {
+      history = await store.get(MEMORY_KEY, { type: 'json' }) || [];
+    }
+    const recentHistory = history.slice(-50);
+
+    // Build a summary of recent conversation for the prompt
+    const conversationSummary = recentHistory.map(t =>
+      `${t.role === 'user' ? 'Amanda' : 'Spring'}: ${(t.content || t.message || '').substring(0, 500)}`
+    ).join('\n');
+
+    // Build memory summary for context
+    const memoryContext = memories.length
+      ? formatMemoriesForPrompt(memories.slice(-20))
+      : 'No memories stored yet.';
+
+    const reportPrompt = `Here is a summary of today's conversations with Amanda and what you're remembering:\n\nCONVERSATION TODAY:\n${conversationSummary || '(no conversation today)'}\n\nWHAT I REMEMBER ABOUT YOU:\n${memoryContext}\n\nWrite a brief, warm nightly report for Amanda summarizing what you helped with today and any important things you're remembering. Keep it under 200 words. Be conversational and friendly.`;
+
+    const report = await callAI(
+      'You are Spring, Amanda\'s AI assistant for activity planning at a retirement community. You are writing a personal nightly report just for Amanda.',
+      reportPrompt,
+      null,
+      []
+    );
+
+    res.json({ report });
+  } catch (err) {
+    console.error('Nightly report error:', err);
+    res.status(500).json({ error: 'Nightly report failed', details: err.message });
   }
 });
 
@@ -1713,8 +1831,9 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Spring (Netlify)',
-    version: '3.1.0',
+    version: '3.3.0',
     model: SPRING_MODEL,
+    provider: 'ollama',
     blobs: true,
     blobStoreMode,
     blobStoreError: blobStoreError || null,
@@ -1731,7 +1850,7 @@ export { handler };
 if (process.env.NETLIFY_DEV !== 'true' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌱 Spring running on port ${PORT}`);
-    console.log(`🤖 ${SPRING_MODEL}: ${OPENROUTER_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 ${SPRING_MODEL}: ${OLLAMA_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
     console.log(`🎨 Canva: ${CANVA_CLIENT_SECRET ? '✅ Configured' : '❌ Missing client secret'}`);
   });
 }

@@ -1,4 +1,5 @@
 /api/hold/*  /.netlify/functions/hold  200
+/api/clutch/*  /.netlify/functions/clutch  200
 /api/*  /.netlify/functions/spring  200
 /hold/*    /hold/index.html   200
 /*    /index.html   200

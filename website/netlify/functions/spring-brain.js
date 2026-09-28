@@ -24,6 +24,25 @@ export async function getAllMemories(store) {
 }
 
 /**
+ * Replace the entire memory store with a new array (used by cleanup/dedup).
+ * @param {Map|import('@netlify/blobs').Store} store
+ * @param {Array} memories - Full array to store
+ */
+export async function saveAllMemories(store, memories) {
+  try {
+    if (store instanceof Map) {
+      store.set(BRAIN_KEY, JSON.stringify(memories));
+    } else {
+      await store.setJSON(BRAIN_KEY, memories);
+    }
+    return { saved: true, count: memories.length };
+  } catch (e) {
+    console.warn('Brain saveAll failed:', e.message);
+    return { saved: false, reason: e.message };
+  }
+}
+
+/**
  * Save a new memory to the brain.
  * @param {Map|import('@netlify/blobs').Store} store
  * @param {Object} memory - { topic, principle, signal, source, agent, metadata? }
@@ -32,10 +51,10 @@ export async function saveMemory(store, memory) {
   try {
     const memories = await getAllMemories(store);
     
-    // Check for near-duplicate (same topic + similar principle)
-    const isDuplicate = memories.some(m => 
-      m.topic === memory.topic && 
-      similarityScore(m.principle, memory.principle) > 0.7
+    // Check for near-duplicate (same topic + similar principle — threshold 0.55)
+    const isDuplicate = memories.some(m =>
+      m.topic === memory.topic &&
+      combinedSimilarity(m, memory) > 0.55
     );
     if (isDuplicate) return { saved: false, reason: 'duplicate' };
 
@@ -66,14 +85,27 @@ export async function saveMemory(store, memory) {
 
 /**
  * Simple word-overlap similarity for duplicate detection.
+ * Threshold 0.55 (lowered from 0.7 to catch more near-duplicates).
+ * Exported so spring.js can use it for pre-save dedup checks.
  */
-function similarityScore(a, b) {
+export function similarityScore(a, b) {
   if (!a || !b) return 0;
   const wordsA = new Set(a.toLowerCase().split(/\s+/).filter(w => w.length > 2));
   const wordsB = new Set(b.toLowerCase().split(/\s+/).filter(w => w.length > 2));
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
   const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
   return intersection / Math.min(wordsA.size, wordsB.size);
+}
+
+/**
+ * Combined similarity comparing principle text AND topic.
+ * Returns a weighted score: 60% principle similarity + 40% topic similarity.
+ */
+function combinedSimilarity(memA, memB) {
+  if (!memA || !memB) return 0;
+  const principleSim = similarityScore(memA.principle, memB.principle);
+  const topicSim = similarityScore(memA.topic, memB.topic);
+  return principleSim * 0.6 + topicSim * 0.4;
 }
 
 /**
@@ -109,6 +141,76 @@ export function formatMemoriesForPrompt(memories) {
     const when = m.created_at ? new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'earlier';
     return `[Memory · ${when}] ${m.principle}`;
   }).join('\n');
+}
+
+/**
+ * Export all memories to a single Obsidian-friendly markdown string,
+ * organized by topic (alphabetical), entries sorted newest-first within each topic.
+ * @param {Array} memories - Array of memory objects
+ * @returns {string} Markdown document
+ */
+export function exportToMarkdown(memories) {
+  if (!memories || !memories.length) {
+    const today = new Date().toISOString().split('T')[0];
+    return `# Spring's Brain — Last Updated: ${today}\n\n_No memories stored._`;
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  let md = `# Spring's Brain — Last Updated: ${today}\n`;
+
+  // Group by topic
+  const byTopic = {};
+  for (const m of memories) {
+    const topic = m.topic || 'general';
+    if (!byTopic[topic]) byTopic[topic] = [];
+    byTopic[topic].push(m);
+  }
+
+  // Sort topics alphabetically
+  const sortedTopics = Object.keys(byTopic).sort((a, b) => a.localeCompare(b));
+
+  for (const topic of sortedTopics) {
+    md += `\n## ${topic}\n`;
+    // Sort entries by date, newest first
+    const entries = byTopic[topic].slice().sort((a, b) => {
+      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return db - da;
+    });
+    for (const m of entries) {
+      const date = m.created_at ? new Date(m.created_at).toISOString().split('T')[0] : 'unknown';
+      md += `- [${date}] ${m.principle || ''}\n`;
+    }
+  }
+
+  return md;
+}
+
+/**
+ * Remove near-duplicate memories (same topic + similarity > 0.55), keeping the newest.
+ * @param {Array} memories - Array of memory objects
+ * @returns {Array} Deduplicated array
+ */
+export function deduplicateMemories(memories) {
+  if (!memories || !memories.length) return [];
+
+  // Sort by created_at descending (newest first) so we keep the newest
+  const sorted = memories.slice().sort((a, b) => {
+    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return db - da;
+  });
+
+  const kept = [];
+  for (const mem of sorted) {
+    const isDup = kept.some(k =>
+      k.topic === mem.topic &&
+      combinedSimilarity(k, mem) > 0.55
+    );
+    if (!isDup) kept.push(mem);
+  }
+
+  return kept;
 }
 
 /**
