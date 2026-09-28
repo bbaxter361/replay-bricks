@@ -15,6 +15,7 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"email":"brian@replaybrick.com","password":"'"$HOLD_PASSWORD"'"}' \
             | jq -r '.token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then echo "Login failed: no token returned"; exit 1; fi
           
           RESULT=$(curl -s -X POST "https://replaybrick.com/api/clutch/scheduler/tick" \
             -H "Authorization: Bearer $TOKEN" \
